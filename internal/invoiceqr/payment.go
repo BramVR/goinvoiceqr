@@ -82,7 +82,11 @@ func normalizeIBAN(input string) (string, error) {
 			return "", errors.New("contains invalid characters")
 		}
 	}
-	if ibanLength(iban[:2]) != 0 && len(iban) != ibanLength(iban[:2]) {
+	length := ibanLength(iban[:2])
+	if length == 0 {
+		return "", errors.New("unsupported country")
+	}
+	if len(iban) != length {
 		return "", errors.New("invalid length")
 	}
 

@@ -73,7 +73,7 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 		},
 		{
 			name:     "unknown iban country",
-			details:  PaymentDetails{Payee: "ACME", IBAN: "ZZ68539007547034", Amount: "1.00", Reference: "INV-1"},
+			details:  PaymentDetails{Payee: "ACME", IBAN: "ZZ66000000000000", Amount: "1.00", Reference: "INV-1"},
 			contains: "iban",
 		},
 		{

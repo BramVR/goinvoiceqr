@@ -149,6 +149,16 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 			contains: "amount",
 		},
 		{
+			name:     "dangling decimal amount",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "42.", Reference: "INV-1"},
+			contains: "amount",
+		},
+		{
+			name:     "dangling comma amount",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "42,", Reference: "INV-1"},
+			contains: "amount",
+		},
+		{
 			name:     "zero amount",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "0", Reference: "INV-1"},
 			contains: "amount",

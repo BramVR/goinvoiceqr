@@ -174,6 +174,9 @@ func normalizeAmount(input string) (string, error) {
 	if len(parts) > 2 || parts[0] == "" {
 		return "", errors.New("malformed")
 	}
+	if len(parts) == 2 && parts[1] == "" {
+		return "", errors.New("malformed")
+	}
 	if len(parts) == 2 && len(parts[1]) > 2 {
 		return "", errors.New("must have at most two decimal places")
 	}

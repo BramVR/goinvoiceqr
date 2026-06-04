@@ -37,7 +37,10 @@ type ValidatedPaymentDetails struct {
 	BIC       string
 }
 
-var structuredReferencePattern = regexp.MustCompile(`^\+\+\+/?(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
+var (
+	structuredReferencePattern      = regexp.MustCompile(`^\+\+\+/?(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
+	looseStructuredReferencePattern = regexp.MustCompile(`^\+\+\+/?[0-9/]+\+\+\+$`)
+)
 
 func ValidatePaymentDetails(details PaymentDetails) (ValidatedPaymentDetails, error) {
 	payee := strings.TrimSpace(details.Payee)
@@ -223,11 +226,8 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 	if hasControlCharacter(reference) {
 		return RemittanceReference{}, errors.New("must not contain control characters")
 	}
-	if strings.HasPrefix(reference, "+++") || strings.HasSuffix(reference, "+++") {
-		match := structuredReferencePattern.FindStringSubmatch(reference)
-		if match == nil {
-			return RemittanceReference{}, errors.New("malformed Belgian Structured Reference")
-		}
+	match := structuredReferencePattern.FindStringSubmatch(reference)
+	if match != nil {
 		digits := match[1] + match[2] + match[3]
 		base := digits[:10]
 		check := digits[10:]
@@ -240,6 +240,9 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 			return RemittanceReference{}, errors.New("invalid Belgian Structured Reference checksum")
 		}
 		return RemittanceReference{Kind: StructuredReference, Value: reference}, nil
+	}
+	if looseStructuredReferencePattern.MatchString(reference) {
+		return RemittanceReference{}, errors.New("malformed Belgian Structured Reference")
 	}
 	return RemittanceReference{Kind: UnstructuredReference, Value: reference}, nil
 }

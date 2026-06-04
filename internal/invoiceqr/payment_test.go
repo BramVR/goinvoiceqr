@@ -54,7 +54,7 @@ func TestValidatePaymentDetailsAcceptsSEPAIBANAndUnstructuredReference(t *testin
 		Payee:     "Dutch Supplier",
 		IBAN:      "NL91 ABNA 0417 1643 00",
 		Amount:    "12",
-		Reference: "Invoice 2026-001",
+		Reference: "Invoice 2026-001+++",
 		BIC:       "gebabebb",
 	})
 
@@ -69,6 +69,9 @@ func TestValidatePaymentDetailsAcceptsSEPAIBANAndUnstructuredReference(t *testin
 	}
 	if details.Reference.Kind != UnstructuredReference {
 		t.Fatalf("reference kind = %v", details.Reference.Kind)
+	}
+	if details.Reference.Value != "Invoice 2026-001+++" {
+		t.Fatalf("reference value = %q", details.Reference.Value)
 	}
 	if details.BIC != "GEBABEBB" {
 		t.Fatalf("bic = %q", details.BIC)
@@ -171,6 +174,11 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 		{
 			name:     "invalid structured reference checksum",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "+++/123/4567/89003+++"},
+			contains: "reference",
+		},
+		{
+			name:     "malformed numeric structured reference",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "+++123/4567/8900+++"},
 			contains: "reference",
 		},
 		{

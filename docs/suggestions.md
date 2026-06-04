@@ -7,7 +7,7 @@ read_when: "Changing from-text, from-pdf, suggestion parsing, ambiguity handling
 
 ## Summary
 
-`from-text` reads copied invoice text from a file or stdin and asks the Suggestion module for Suggested Payment Details. The module extracts conservative payee, IBAN, amount, and remittance-reference candidates, applies explicit CLI flag overrides, then sends the result through deterministic validation and mandatory confirmation before QR output.
+`from-text` reads copied invoice text from a file or stdin, while `from-pdf` extracts text with local `pdftotext`. Both commands ask the Suggestion module for Suggested Payment Details. The module extracts conservative payee, IBAN, amount, and remittance-reference candidates, applies explicit CLI flag overrides, then sends the result through deterministic validation and mandatory confirmation before QR output.
 
 ## Read when
 
@@ -15,7 +15,7 @@ Read when changing `from-text`, `from-pdf`, suggestion parsing, amount parsing, 
 
 ## Flow
 
-- CLI adapters read text from a file, stdin, or future PDF extraction.
+- CLI adapters read text from a file, stdin, or `pdftotext` PDF extraction.
 - The Suggestion module extracts candidates and refuses missing required fields.
 - Explicit flags override suggested fields.
 - Multiple plausible IBANs or amounts are ambiguity errors unless flags resolve them.

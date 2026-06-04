@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/alecthomas/kong"
@@ -96,35 +97,62 @@ func (cmd FromTextCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	suggestion, err := invoiceqr.SuggestPaymentDetailsFromText(text, cmd.paymentDetails())
-	if err != nil {
-		return err
-	}
 	confirm := confirmPaymentDetails
 	if cmd.File == "" {
 		confirm = confirmPaymentDetailsFromTerminal
 	}
+	return generateSuggestedPaymentArtifact(text, cmd.paymentDetails(), cmd.qrOutputOptions(), confirm)
+}
+
+func generateSuggestedPaymentArtifact(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions, confirm invoiceqr.PaymentConfirmationFunc) error {
+	suggestion, err := invoiceqr.SuggestPaymentDetailsFromText(text, overrides)
+	if err != nil {
+		return err
+	}
 	return invoiceqr.GeneratePaymentArtifact(
 		invoiceqr.PaymentGenerationOptions{
 			Details: suggestionPaymentDetails(suggestion),
-			Output:  cmd.qrOutputOptions(),
+			Output:  output,
 		},
 		confirm,
 	)
 }
 
 type FromPDFCmd struct {
-	PDF                 string `arg:"" optional:"" help:"Invoice PDF path."`
+	PDF                 string `arg:"" help:"Invoice PDF path."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
 }
 
-func (FromPDFCmd) Run() error {
-	return errNotImplemented("from-pdf")
+func (cmd FromPDFCmd) Run() error {
+	text, err := extractPDFText(cmd.PDF, pdfTextCommandRunner)
+	if err != nil {
+		return err
+	}
+	return generateSuggestedPaymentArtifact(text, cmd.paymentDetails(), cmd.qrOutputOptions(), confirmPaymentDetails)
 }
 
-func errNotImplemented(command string) error {
-	return errors.New(command + " is not implemented yet")
+type commandRunner func(string, ...string) ([]byte, error)
+
+var pdfTextCommandRunner commandRunner = runCommand
+
+func runCommand(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).Output()
+}
+
+func extractPDFText(path string, runner commandRunner) (string, error) {
+	pdf := strings.TrimSpace(path)
+	if pdf == "" {
+		return "", errors.New("pdf: required")
+	}
+	output, err := runner("pdftotext", pdf, "-")
+	if err != nil {
+		if errors.Is(err, exec.ErrNotFound) {
+			return "", errors.New("pdftotext: not found; install poppler/pdftotext and retry")
+		}
+		return "", fmt.Errorf("pdftotext: %w", err)
+	}
+	return string(output), nil
 }
 
 func printPaymentDetails(details invoiceqr.ValidatedPaymentDetails) {

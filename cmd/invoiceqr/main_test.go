@@ -87,30 +87,6 @@ func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 	}
 }
 
-func TestCommandsReturnPlaceholderErrors(t *testing.T) {
-	tests := []struct {
-		name    string
-		args    []string
-		message string
-	}{
-		{name: "from-pdf", args: []string{"from-pdf"}, message: "from-pdf is not implemented yet"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command("go", append([]string{"run", "."}, tt.args...)...)
-
-			output, err := cmd.CombinedOutput()
-			if err == nil {
-				t.Fatalf("expected command to fail, output:\n%s", output)
-			}
-			if !strings.Contains(string(output), tt.message) {
-				t.Fatalf("expected output to contain %q, got:\n%s", tt.message, output)
-			}
-		})
-	}
-}
-
 func TestValidatePrintsNormalizedPaymentDetails(t *testing.T) {
 	cmd := exec.Command("go", "run", ".", "validate",
 		"--payee", " ACME BV ",
@@ -377,6 +353,116 @@ func TestFromTextRejectsYesFlag(t *testing.T) {
 	}
 }
 
+func TestFromPDFInvokesPdftotextAndWritesAfterConfirmation(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	setStdin(t, "yes\n")
+	var gotName string
+	var gotArgs []string
+	withPDFTextCommandRunner(t, func(name string, args ...string) ([]byte, error) {
+		gotName = name
+		gotArgs = args
+		return []byte(clearInvoiceText()), nil
+	})
+
+	cmd := FromPDFCmd{
+		PDF:           "invoice.pdf",
+		QROutputFlags: QROutputFlags{Out: out},
+	}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("expected from-pdf to succeed, got %v", err)
+	}
+	if gotName != "pdftotext" {
+		t.Fatalf("runner name = %q, want pdftotext", gotName)
+	}
+	if strings.Join(gotArgs, "\x00") != strings.Join([]string{"invoice.pdf", "-"}, "\x00") {
+		t.Fatalf("runner args = %#v, want %#v", gotArgs, []string{"invoice.pdf", "-"})
+	}
+	assertSVGOutput(t, out)
+}
+
+func TestFromPDFMissingPdftotextReportsInstallHelp(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
+		return nil, exec.ErrNotFound
+	})
+
+	cmd := FromPDFCmd{
+		PDF:           "invoice.pdf",
+		QROutputFlags: QROutputFlags{Out: out},
+	}
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected missing pdftotext error")
+	}
+	message := strings.ToLower(err.Error())
+	if !strings.Contains(message, "pdftotext") || !strings.Contains(message, "install") {
+		t.Fatalf("expected pdftotext install help, got %v", err)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromPDFAmbiguousSuggestionDoesNotWrite(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	setStdin(t, "yes\n")
+	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
+		return []byte(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Total: EUR 12.00
+Reference: INV-1
+`), nil
+	})
+
+	cmd := FromPDFCmd{
+		PDF:           "invoice.pdf",
+		QROutputFlags: QROutputFlags{Out: out},
+	}
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected ambiguity error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "amount") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
+		t.Fatalf("expected amount ambiguity error, got %v", err)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromPDFRefusalDoesNotWrite(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	setStdin(t, "no\n")
+	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
+		return []byte(clearInvoiceText()), nil
+	})
+
+	cmd := FromPDFCmd{
+		PDF:           "invoice.pdf",
+		QROutputFlags: QROutputFlags{Out: out},
+	}
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected confirmation refusal")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "confirmation") {
+		t.Fatalf("expected confirmation error, got %v", err)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromPDFRejectsYesFlag(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "from-pdf", "invoice.pdf", "--yes")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected --yes to fail for from-pdf, output:\n%s", output)
+	}
+}
+
 func assertSVGOutput(t *testing.T, path string) {
 	t.Helper()
 
@@ -395,4 +481,35 @@ IBAN: BE68 5390 0754 7034
 Amount: EUR 42.50
 Reference: INV-2026-001
 `
+}
+
+func setStdin(t *testing.T, input string) {
+	t.Helper()
+
+	file, err := os.CreateTemp(t.TempDir(), "stdin-*.txt")
+	if err != nil {
+		t.Fatalf("create stdin: %v", err)
+	}
+	if _, err := file.WriteString(input); err != nil {
+		t.Fatalf("write stdin: %v", err)
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatalf("seek stdin: %v", err)
+	}
+	oldStdin := os.Stdin
+	os.Stdin = file
+	t.Cleanup(func() {
+		os.Stdin = oldStdin
+		file.Close()
+	})
+}
+
+func withPDFTextCommandRunner(t *testing.T, runner commandRunner) {
+	t.Helper()
+
+	oldRunner := pdfTextCommandRunner
+	pdfTextCommandRunner = runner
+	t.Cleanup(func() {
+		pdfTextCommandRunner = oldRunner
+	})
 }

@@ -2,7 +2,7 @@
 
 `invoiceqr` is a Go CLI for Belgian-compatible SEPA/EPC payment QR codes.
 
-The current scaffold wires the planned command entrypoints and implements payment-detail validation. EPC payload construction and QR rendering are not implemented yet.
+The current scaffold wires the planned command entrypoints and implements payment-detail validation and deterministic EPC payload construction. QR rendering is not implemented yet.
 
 ## Build
 

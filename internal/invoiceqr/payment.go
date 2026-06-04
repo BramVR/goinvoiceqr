@@ -82,6 +82,9 @@ func normalizeIBAN(input string) (string, error) {
 	if len(iban) < 4 {
 		return "", errors.New("too short")
 	}
+	if !asciiDigit(rune(iban[2])) || !asciiDigit(rune(iban[3])) {
+		return "", errors.New("check digits must be digits")
+	}
 	for _, r := range iban {
 		if !unicode.IsDigit(r) && (r < 'A' || r > 'Z') {
 			return "", errors.New("contains invalid characters")

@@ -114,6 +114,11 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 			contains: "iban",
 		},
 		{
+			name:     "iban check digits must be digits",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BEOX539007547034", Amount: "1.00", Reference: "INV-1"},
+			contains: "iban",
+		},
+		{
 			name:     "unknown iban country",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "ZZ66000000000000", Amount: "1.00", Reference: "INV-1"},
 			contains: "iban",

@@ -160,6 +160,26 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsFromTextRejectsSignedNegativeAmounts(t *testing.T) {
+	for _, line := range []string{"Amount: EUR -42.50", "Amount: -42.50", "Amount: (42.50)", "Amount: EUR (42.50)"} {
+		t.Run(line, func(t *testing.T) {
+			_, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+`+line+`
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err == nil {
+				t.Fatalf("expected amount error")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "amount") {
+				t.Fatalf("expected amount error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextReportsMissingFields(t *testing.T) {
 	_, err := SuggestPaymentDetailsFromText(`
 Payee: ACME BV

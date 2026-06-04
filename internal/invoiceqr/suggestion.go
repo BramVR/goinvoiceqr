@@ -50,6 +50,7 @@ var (
 	amountTokenPattern          = regexp.MustCompile(amountTokenPatternText)
 	currencyBeforeAmountPattern = regexp.MustCompile(`(?i)(?:EUR|€)\s*(` + amountTokenPatternText + `)`)
 	currencyAfterAmountPattern  = regexp.MustCompile(`(?i)(?:^|[^0-9.,\p{Zs}\t-])\s*(` + amountTokenPatternText + `)\s*(?:EUR|€)`)
+	signedAmountPattern         = regexp.MustCompile(`(?i)(?:EUR|€)\s*-\s*` + amountTokenPatternText + `|(?:^|[:\p{Zs}\t])-\s*` + amountTokenPatternText + `|(?:EUR|€)\s*\(\s*` + amountTokenPatternText + `\s*\)|(?:^|[:\p{Zs}\t])\(\s*(?:EUR|€)?\s*` + amountTokenPatternText + `\s*\)`)
 	structuredRefPattern        = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
 )
 
@@ -119,6 +120,9 @@ func findAmountCandidates(text string) []string {
 }
 
 func findAmountCandidatesInLine(line string) []string {
+	if signedAmountPattern.MatchString(line) {
+		return nil
+	}
 	currencyMatches := currencyBeforeAmountPattern.FindAllStringSubmatch(line, -1)
 	candidates := []string{}
 	for _, match := range currencyMatches {

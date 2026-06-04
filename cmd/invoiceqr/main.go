@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -90,8 +91,22 @@ type FromTextCmd struct {
 	QROutputFlags       `embed:""`
 }
 
-func (FromTextCmd) Run() error {
-	return errNotImplemented("from-text")
+func (cmd FromTextCmd) Run() error {
+	text, err := readInvoiceText(cmd.File)
+	if err != nil {
+		return err
+	}
+	suggestion, err := invoiceqr.SuggestPaymentDetailsFromText(text, cmd.paymentDetails())
+	if err != nil {
+		return err
+	}
+	return invoiceqr.GeneratePaymentArtifact(
+		invoiceqr.PaymentGenerationOptions{
+			Details: suggestionPaymentDetails(suggestion),
+			Output:  cmd.qrOutputOptions(),
+		},
+		confirmPaymentDetails,
+	)
 }
 
 type FromPDFCmd struct {
@@ -140,6 +155,31 @@ func confirmPaymentDetails(details invoiceqr.ValidatedPaymentDetails) (bool, err
 		return true, nil
 	default:
 		return false, nil
+	}
+}
+
+func readInvoiceText(path string) (string, error) {
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func suggestionPaymentDetails(details invoiceqr.SuggestedPaymentDetails) invoiceqr.PaymentDetails {
+	return invoiceqr.PaymentDetails{
+		Payee:     details.Payee,
+		IBAN:      details.IBAN,
+		Amount:    details.Amount,
+		Reference: details.Reference,
+		BIC:       details.BIC,
 	}
 }
 

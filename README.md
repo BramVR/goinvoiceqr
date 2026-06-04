@@ -2,7 +2,13 @@
 
 `invoiceqr` is a Go CLI for Belgian-compatible SEPA/EPC payment QR codes.
 
-The current scaffold wires the planned command entrypoints and implements payment-detail validation, deterministic EPC payload construction, QR rendering, QR artifact output policy, manual QR generation, and text/PDF-based payment-detail suggestions.
+The CLI implements payment-detail validation, deterministic EPC payload construction, QR rendering, QR artifact output policy, manual QR generation, and text/PDF-based payment-detail suggestions.
+
+## Safety Model
+
+`invoiceqr` keeps payment generation deterministic. Manual Payment Details are the values supplied directly through CLI flags such as `--payee`, `--iban`, `--amount`, and `--reference`. Suggested Payment Details are candidates extracted from copied invoice text or PDF text extraction. Confirmed Payment Details are validated details that the user explicitly approved before QR output.
+
+Text extraction, PDF extraction, OCR, and AI may suggest values only. They must not bypass validation, confirmation, or the trusted payment-generation path. `generate --yes` is intended for already-known manual details. Suggested details from `from-text` and `from-pdf` always require explicit confirmation before output.
 
 ## Build
 
@@ -24,12 +30,52 @@ go test ./...
 
 ## Run
 
+Show available commands:
+
 ```sh
 go run ./cmd/invoiceqr --help
-go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-1 --out invoice.svg
-go run ./cmd/invoiceqr validate
+```
+
+Validate manual payment details without writing a QR artifact:
+
+```sh
+go run ./cmd/invoiceqr validate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001
+```
+
+Generate a QR artifact from manual payment details:
+
+```sh
+go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001 --out invoice.svg
+go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001 --out invoice.png
+```
+
+Suggest payment details from copied invoice text:
+
+```sh
 go run ./cmd/invoiceqr from-text invoice.txt --out invoice.svg
+pbpaste | go run ./cmd/invoiceqr from-text --out invoice.svg
+```
+
+Suggest payment details from a PDF invoice:
+
+```sh
 go run ./cmd/invoiceqr from-pdf invoice.pdf --out invoice.svg
 ```
 
-`validate` prints normalized payment details and field-specific validation errors. `generate` validates manual payment details, asks for confirmation unless `--yes` is supplied, and writes a QR artifact. `from-text` and `from-pdf` suggest payment details from copied text or PDF text extraction and always require confirmation before output. `from-pdf` requires the local `pdftotext` command.
+Override a suggested field when the invoice text is ambiguous or incomplete:
+
+```sh
+go run ./cmd/invoiceqr from-text invoice.txt --amount 42.50 --reference INV-2026-001 --out invoice.svg
+```
+
+`validate` prints normalized payment details and field-specific validation errors. `generate` validates manual payment details, asks for confirmation unless `--yes` is supplied, and writes a QR artifact. `from-text` and `from-pdf` suggest payment details and always require confirmation before output.
+
+## Output
+
+`--out` is required for QR generation. The file extension selects the output format when it is `.svg` or `.png`; otherwise pass `--format svg` or `--format png`.
+
+Existing output files are refused by default to avoid accidental replacement. Pass `--force` to overwrite an existing QR artifact.
+
+## PDF Extraction
+
+`from-pdf` shells out to the local `pdftotext` command and reads its extracted text. Install Poppler or another package that provides `pdftotext` before using PDF suggestions. When `pdftotext` is missing, the CLI reports that dependency and asks you to install `poppler`/`pdftotext` and retry.

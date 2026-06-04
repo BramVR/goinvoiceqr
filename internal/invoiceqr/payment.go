@@ -91,6 +91,9 @@ func normalizeIBAN(input string) (string, error) {
 	if length == 0 {
 		return "", errors.New("unsupported country")
 	}
+	if !sepaCountry(iban[:2]) {
+		return "", errors.New("country is outside SEPA")
+	}
 	if len(iban) != length {
 		return "", errors.New("invalid length")
 	}
@@ -138,6 +141,21 @@ func ibanLength(country string) int {
 	return lengths[country]
 }
 
+func sepaCountry(country string) bool {
+	countries := map[string]bool{
+		"AD": true, "AL": true, "AT": true, "BE": true, "BG": true,
+		"CH": true, "CY": true, "CZ": true, "DE": true, "DK": true,
+		"EE": true, "ES": true, "FI": true, "FR": true, "GB": true,
+		"GI": true, "GR": true, "HR": true,
+		"HU": true, "IE": true, "IS": true, "IT": true, "LI": true,
+		"LT": true, "LU": true, "LV": true, "MC": true, "MD": true,
+		"ME": true, "MK": true, "MT": true, "NL": true, "NO": true,
+		"PL": true, "PT": true, "RO": true, "RS": true, "SE": true,
+		"SI": true, "SK": true, "SM": true, "VA": true, "XK": true,
+	}
+	return countries[country]
+}
+
 func normalizeAmount(input string) (string, error) {
 	amount := strings.TrimSpace(strings.ReplaceAll(input, ",", "."))
 	if amount == "" {
@@ -158,7 +176,7 @@ func normalizeAmount(input string) (string, error) {
 			continue
 		}
 		for _, r := range part {
-			if !unicode.IsDigit(r) {
+			if !asciiDigit(r) {
 				return "", errors.New("malformed")
 			}
 		}
@@ -179,6 +197,10 @@ func normalizeAmount(input string) (string, error) {
 		cents = "0"
 	}
 	return cents + "." + fraction, nil
+}
+
+func asciiDigit(r rune) bool {
+	return r >= '0' && r <= '9'
 }
 
 func classifyRemittanceReference(input string) (RemittanceReference, error) {

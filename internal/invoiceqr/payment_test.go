@@ -103,8 +103,18 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 			contains: "iban",
 		},
 		{
+			name:     "non sepa iban country",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BR9700360305000010009795493P1", Amount: "1.00", Reference: "INV-1"},
+			contains: "iban",
+		},
+		{
 			name:     "over precise amount",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.234", Reference: "INV-1"},
+			contains: "amount",
+		},
+		{
+			name:     "unicode zero amount",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "٠", Reference: "INV-1"},
 			contains: "amount",
 		},
 		{

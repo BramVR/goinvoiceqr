@@ -127,6 +127,11 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 			contains: "iban",
 		},
 		{
+			name:     "invalid belgian iban bban format",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE97AAAA00000000", Amount: "1.00", Reference: "INV-1"},
+			contains: "iban",
+		},
+		{
 			name:     "unknown iban country",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "ZZ66000000000000", Amount: "1.00", Reference: "INV-1"},
 			contains: "iban",
@@ -179,6 +184,11 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 		{
 			name:     "malformed numeric structured reference",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "+++123/4567/8900+++"},
+			contains: "reference",
+		},
+		{
+			name:     "spaced structured reference",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "+++ 123/4567/89002 +++"},
 			contains: "reference",
 		},
 		{

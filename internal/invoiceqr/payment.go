@@ -38,8 +38,52 @@ type ValidatedPaymentDetails struct {
 }
 
 var (
-	structuredReferencePattern      = regexp.MustCompile(`^\+\+\+/?(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
-	looseStructuredReferencePattern = regexp.MustCompile(`^\+\+\+/?[0-9/]+\+\+\+$`)
+	structuredReferencePattern = regexp.MustCompile(`^\+\+\+/?(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
+	ibanBBANPatterns           = map[string]*regexp.Regexp{
+		"AD": regexp.MustCompile(`^[0-9]{8}[A-Z0-9]{12}$`),
+		"AL": regexp.MustCompile(`^[0-9]{8}[A-Z0-9]{16}$`),
+		"AT": regexp.MustCompile(`^[0-9]{16}$`),
+		"BE": regexp.MustCompile(`^[0-9]{12}$`),
+		"BG": regexp.MustCompile(`^[A-Z]{4}[0-9]{6}[A-Z0-9]{8}$`),
+		"CH": regexp.MustCompile(`^[0-9]{5}[A-Z0-9]{12}$`),
+		"CY": regexp.MustCompile(`^[0-9]{8}[A-Z0-9]{16}$`),
+		"CZ": regexp.MustCompile(`^[0-9]{20}$`),
+		"DE": regexp.MustCompile(`^[0-9]{18}$`),
+		"DK": regexp.MustCompile(`^[0-9]{14}$`),
+		"EE": regexp.MustCompile(`^[0-9]{16}$`),
+		"ES": regexp.MustCompile(`^[0-9]{20}$`),
+		"FI": regexp.MustCompile(`^[0-9]{14}$`),
+		"FR": regexp.MustCompile(`^[0-9]{10}[A-Z0-9]{11}[0-9]{2}$`),
+		"GB": regexp.MustCompile(`^[A-Z]{4}[0-9]{14}$`),
+		"GI": regexp.MustCompile(`^[A-Z]{4}[A-Z0-9]{15}$`),
+		"GR": regexp.MustCompile(`^[0-9]{7}[A-Z0-9]{16}$`),
+		"HR": regexp.MustCompile(`^[0-9]{17}$`),
+		"HU": regexp.MustCompile(`^[0-9]{24}$`),
+		"IE": regexp.MustCompile(`^[A-Z]{4}[0-9]{14}$`),
+		"IS": regexp.MustCompile(`^[0-9]{22}$`),
+		"IT": regexp.MustCompile(`^[A-Z][0-9]{10}[A-Z0-9]{12}$`),
+		"LI": regexp.MustCompile(`^[0-9]{5}[A-Z0-9]{12}$`),
+		"LT": regexp.MustCompile(`^[0-9]{16}$`),
+		"LU": regexp.MustCompile(`^[0-9]{3}[A-Z0-9]{13}$`),
+		"LV": regexp.MustCompile(`^[A-Z]{4}[A-Z0-9]{13}$`),
+		"MC": regexp.MustCompile(`^[0-9]{10}[A-Z0-9]{11}[0-9]{2}$`),
+		"MD": regexp.MustCompile(`^[A-Z0-9]{20}$`),
+		"ME": regexp.MustCompile(`^[0-9]{18}$`),
+		"MK": regexp.MustCompile(`^[0-9]{3}[A-Z0-9]{10}[0-9]{2}$`),
+		"MT": regexp.MustCompile(`^[A-Z]{4}[0-9]{5}[A-Z0-9]{18}$`),
+		"NL": regexp.MustCompile(`^[A-Z]{4}[0-9]{10}$`),
+		"NO": regexp.MustCompile(`^[0-9]{11}$`),
+		"PL": regexp.MustCompile(`^[0-9]{24}$`),
+		"PT": regexp.MustCompile(`^[0-9]{21}$`),
+		"RO": regexp.MustCompile(`^[A-Z]{4}[A-Z0-9]{16}$`),
+		"RS": regexp.MustCompile(`^[0-9]{18}$`),
+		"SE": regexp.MustCompile(`^[0-9]{20}$`),
+		"SI": regexp.MustCompile(`^[0-9]{15}$`),
+		"SK": regexp.MustCompile(`^[0-9]{20}$`),
+		"SM": regexp.MustCompile(`^[A-Z][0-9]{10}[A-Z0-9]{12}$`),
+		"VA": regexp.MustCompile(`^[0-9]{18}$`),
+		"XK": regexp.MustCompile(`^[0-9]{16}$`),
+	}
 )
 
 func ValidatePaymentDetails(details PaymentDetails) (ValidatedPaymentDetails, error) {
@@ -106,6 +150,9 @@ func normalizeIBAN(input string) (string, error) {
 	if len(iban) != length {
 		return "", errors.New("invalid length")
 	}
+	if !validBBANFormat(iban) {
+		return "", errors.New("invalid country format")
+	}
 
 	rearranged := iban[4:] + iban[:4]
 	var numeric strings.Builder
@@ -163,6 +210,14 @@ func sepaCountry(country string) bool {
 		"SI": true, "SK": true, "SM": true, "VA": true, "XK": true,
 	}
 	return countries[country]
+}
+
+func validBBANFormat(iban string) bool {
+	pattern := ibanBBANPatterns[iban[:2]]
+	if pattern == nil {
+		return true
+	}
+	return pattern.MatchString(iban[4:])
 }
 
 func normalizeAmount(input string) (string, error) {
@@ -241,10 +296,31 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 		}
 		return RemittanceReference{Kind: StructuredReference, Value: reference}, nil
 	}
-	if looseStructuredReferencePattern.MatchString(reference) {
+	if looksLikeBelgianStructuredReference(reference) {
 		return RemittanceReference{}, errors.New("malformed Belgian Structured Reference")
 	}
 	return RemittanceReference{Kind: UnstructuredReference, Value: reference}, nil
+}
+
+func looksLikeBelgianStructuredReference(reference string) bool {
+	if !strings.HasPrefix(reference, "+++") || !strings.HasSuffix(reference, "+++") {
+		return false
+	}
+	body := strings.TrimSpace(reference[3 : len(reference)-3])
+	if strings.HasPrefix(body, "/") {
+		body = strings.TrimSpace(body[1:])
+	}
+	hasDigit := false
+	for _, r := range body {
+		switch {
+		case asciiDigit(r):
+			hasDigit = true
+		case r == '/' || unicode.IsSpace(r):
+		default:
+			return false
+		}
+	}
+	return hasDigit
 }
 
 func normalizeBIC(input string) (string, error) {

@@ -39,6 +39,7 @@ func TestValidatePaymentDetailsAcceptsSEPAIBANAndUnstructuredReference(t *testin
 		IBAN:      "NL91 ABNA 0417 1643 00",
 		Amount:    "12",
 		Reference: "Invoice 2026-001",
+		BIC:       "gebabebb",
 	})
 
 	if err != nil {
@@ -52,6 +53,31 @@ func TestValidatePaymentDetailsAcceptsSEPAIBANAndUnstructuredReference(t *testin
 	}
 	if details.Reference.Kind != UnstructuredReference {
 		t.Fatalf("reference kind = %v", details.Reference.Kind)
+	}
+	if details.BIC != "GEBABEBB" {
+		t.Fatalf("bic = %q", details.BIC)
+	}
+}
+
+func TestValidatePaymentDetailsCountsTextLimitsByCharacters(t *testing.T) {
+	payee := strings.Repeat("é", 70)
+	reference := strings.Repeat("é", 140)
+
+	details, err := ValidatePaymentDetails(PaymentDetails{
+		Payee:     payee,
+		IBAN:      "BE68539007547034",
+		Amount:    "1.00",
+		Reference: reference,
+	})
+
+	if err != nil {
+		t.Fatalf("expected utf-8 text within character limits to pass, got %v", err)
+	}
+	if details.Payee != payee {
+		t.Fatalf("payee = %q", details.Payee)
+	}
+	if details.Reference.Value != reference {
+		t.Fatalf("reference = %q", details.Reference.Value)
 	}
 }
 
@@ -99,6 +125,26 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 		{
 			name:     "invalid structured reference checksum",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "+++/123/4567/89003+++"},
+			contains: "reference",
+		},
+		{
+			name:     "invalid bic length",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1", BIC: "GEBABEB"},
+			contains: "bic",
+		},
+		{
+			name:     "invalid bic separator",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1", BIC: "GEBABEBB XXX"},
+			contains: "bic",
+		},
+		{
+			name:     "payee over character limit",
+			details:  PaymentDetails{Payee: strings.Repeat("A", 71), IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1"},
+			contains: "payee",
+		},
+		{
+			name:     "reference over character limit",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: strings.Repeat("A", 141)},
 			contains: "reference",
 		},
 	}

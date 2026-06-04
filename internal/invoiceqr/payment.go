@@ -44,7 +44,7 @@ func ValidatePaymentDetails(details PaymentDetails) (ConfirmedPaymentDetails, er
 	if payee == "" {
 		return ConfirmedPaymentDetails{}, errors.New("payee: required")
 	}
-	if len(payee) > 70 {
+	if len([]rune(payee)) > 70 {
 		return ConfirmedPaymentDetails{}, errors.New("payee: must be at most 70 characters")
 	}
 
@@ -63,12 +63,17 @@ func ValidatePaymentDetails(details PaymentDetails) (ConfirmedPaymentDetails, er
 		return ConfirmedPaymentDetails{}, fmt.Errorf("reference: %w", err)
 	}
 
+	bic, err := normalizeBIC(details.BIC)
+	if err != nil {
+		return ConfirmedPaymentDetails{}, fmt.Errorf("bic: %w", err)
+	}
+
 	return ConfirmedPaymentDetails{
 		Payee:     payee,
 		IBAN:      iban,
 		Amount:    amount,
 		Reference: reference,
-		BIC:       strings.ToUpper(strings.TrimSpace(details.BIC)),
+		BIC:       bic,
 	}, nil
 }
 
@@ -181,7 +186,7 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 	if reference == "" {
 		return RemittanceReference{}, errors.New("required")
 	}
-	if len(reference) > 140 {
+	if len([]rune(reference)) > 140 {
 		return RemittanceReference{}, errors.New("must be at most 140 characters")
 	}
 	if strings.HasPrefix(reference, "+++") || strings.HasSuffix(reference, "+++") {
@@ -203,6 +208,26 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 		return RemittanceReference{Kind: StructuredReference, Value: reference}, nil
 	}
 	return RemittanceReference{Kind: UnstructuredReference, Value: reference}, nil
+}
+
+func normalizeBIC(input string) (string, error) {
+	bic := strings.ToUpper(strings.TrimSpace(input))
+	if bic == "" {
+		return "", nil
+	}
+	if len(bic) != 8 && len(bic) != 11 {
+		return "", errors.New("must be 8 or 11 characters")
+	}
+	for i, r := range bic {
+		switch {
+		case i < 4 && r >= 'A' && r <= 'Z':
+		case i >= 4 && i < 6 && r >= 'A' && r <= 'Z':
+		case i >= 6 && ((r >= 'A' && r <= 'Z') || unicode.IsDigit(r)):
+		default:
+			return "", errors.New("must be a valid SWIFT/BIC code")
+		}
+	}
+	return bic, nil
 }
 
 func removeSpace(input string) string {

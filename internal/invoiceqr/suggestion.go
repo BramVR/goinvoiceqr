@@ -43,13 +43,14 @@ func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (Sugge
 }
 
 var (
-	payeeLinePattern      = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
-	referenceLinePattern  = regexp.MustCompile(`(?im)^\s*(?:reference|communication|remittance|mededeling|invoice)\s*:\s*(.+?)\s*$`)
-	ibanCandidatePattern  = regexp.MustCompile(`(?i)\b[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
-	amountLinePattern     = regexp.MustCompile(`(?im)^\s*(?:amount|total|bedrag|totaal|montant)\b[^\n]*`)
-	amountTokenPattern    = regexp.MustCompile(amountTokenPatternText)
-	currencyAmountPattern = regexp.MustCompile(`(?i)(?:EUR|€)\s*(` + amountTokenPatternText + `)|(` + amountTokenPatternText + `)\s*(?:EUR|€)`)
-	structuredRefPattern  = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
+	payeeLinePattern            = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
+	referenceLinePattern        = regexp.MustCompile(`(?im)^\s*(?:reference|communication|remittance|mededeling|invoice)\s*:\s*(.+?)\s*$`)
+	ibanCandidatePattern        = regexp.MustCompile(`(?i)\b[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
+	amountLinePattern           = regexp.MustCompile(`(?im)^\s*(?:amount|total|bedrag|totaal|montant)\b[^\n]*`)
+	amountTokenPattern          = regexp.MustCompile(amountTokenPatternText)
+	currencyBeforeAmountPattern = regexp.MustCompile(`(?i)(?:EUR|€)\s*(` + amountTokenPatternText + `)`)
+	currencyAfterAmountPattern  = regexp.MustCompile(`(?i)(?:^|[^0-9.,\p{Zs}\t-])\s*(` + amountTokenPatternText + `)\s*(?:EUR|€)`)
+	structuredRefPattern        = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
 )
 
 const amountTokenPatternText = `[0-9](?:[0-9.,\p{Zs}\t]*[0-9])?`
@@ -118,13 +119,20 @@ func findAmountCandidates(text string) []string {
 }
 
 func findAmountCandidatesInLine(line string) []string {
-	currencyMatches := currencyAmountPattern.FindAllStringSubmatch(line, -1)
+	currencyMatches := currencyBeforeAmountPattern.FindAllStringSubmatch(line, -1)
 	candidates := []string{}
 	for _, match := range currencyMatches {
 		if match[1] != "" {
 			candidates = append(candidates, match[1])
-		} else {
-			candidates = append(candidates, match[2])
+		}
+	}
+	if len(candidates) > 0 {
+		return candidates
+	}
+	currencyMatches = currencyAfterAmountPattern.FindAllStringSubmatch(line, -1)
+	for _, match := range currencyMatches {
+		if match[1] != "" {
+			candidates = append(candidates, match[1])
 		}
 	}
 	if len(candidates) > 0 {

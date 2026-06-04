@@ -83,18 +83,28 @@ Reference: INV-2026-001
 }
 
 func TestSuggestPaymentDetailsFromTextUsesCurrencyAmountAfterDate(t *testing.T) {
-	suggestion, err := SuggestPaymentDetailsFromText(`
+	tests := []string{
+		"Total due by 2026-06-30: EUR 42.50",
+		"Total due by 2026-06-30 EUR 42.50",
+		"Total: 42.50 EUR",
+	}
+
+	for _, line := range tests {
+		t.Run(line, func(t *testing.T) {
+			suggestion, err := SuggestPaymentDetailsFromText(`
 Payee: ACME BV
 IBAN: BE68 5390 0754 7034
-Total due by 2026-06-30: EUR 42.50
+`+line+`
 Reference: INV-2026-001
 `, PaymentDetails{})
 
-	if err != nil {
-		t.Fatalf("expected suggestion, got %v", err)
-	}
-	if suggestion.Amount != "42.50" {
-		t.Fatalf("amount = %q, want 42.50", suggestion.Amount)
+			if err != nil {
+				t.Fatalf("expected suggestion, got %v", err)
+			}
+			if suggestion.Amount != "42.50" {
+				t.Fatalf("amount = %q, want 42.50", suggestion.Amount)
+			}
+		})
 	}
 }
 

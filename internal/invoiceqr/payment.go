@@ -29,7 +29,7 @@ type RemittanceReference struct {
 	Value string
 }
 
-type ConfirmedPaymentDetails struct {
+type ValidatedPaymentDetails struct {
 	Payee     string
 	IBAN      string
 	Amount    string
@@ -39,39 +39,39 @@ type ConfirmedPaymentDetails struct {
 
 var structuredReferencePattern = regexp.MustCompile(`^\+\+\+/?(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
 
-func ValidatePaymentDetails(details PaymentDetails) (ConfirmedPaymentDetails, error) {
+func ValidatePaymentDetails(details PaymentDetails) (ValidatedPaymentDetails, error) {
 	payee := strings.TrimSpace(details.Payee)
 	if payee == "" {
-		return ConfirmedPaymentDetails{}, errors.New("payee: required")
+		return ValidatedPaymentDetails{}, errors.New("payee: required")
 	}
 	if len([]rune(payee)) > 70 {
-		return ConfirmedPaymentDetails{}, errors.New("payee: must be at most 70 characters")
+		return ValidatedPaymentDetails{}, errors.New("payee: must be at most 70 characters")
 	}
 	if hasControlCharacter(payee) {
-		return ConfirmedPaymentDetails{}, errors.New("payee: must not contain control characters")
+		return ValidatedPaymentDetails{}, errors.New("payee: must not contain control characters")
 	}
 
 	iban, err := normalizeIBAN(details.IBAN)
 	if err != nil {
-		return ConfirmedPaymentDetails{}, fmt.Errorf("iban: %w", err)
+		return ValidatedPaymentDetails{}, fmt.Errorf("iban: %w", err)
 	}
 
 	amount, err := normalizeAmount(details.Amount)
 	if err != nil {
-		return ConfirmedPaymentDetails{}, fmt.Errorf("amount: %w", err)
+		return ValidatedPaymentDetails{}, fmt.Errorf("amount: %w", err)
 	}
 
 	reference, err := classifyRemittanceReference(details.Reference)
 	if err != nil {
-		return ConfirmedPaymentDetails{}, fmt.Errorf("reference: %w", err)
+		return ValidatedPaymentDetails{}, fmt.Errorf("reference: %w", err)
 	}
 
 	bic, err := normalizeBIC(details.BIC)
 	if err != nil {
-		return ConfirmedPaymentDetails{}, fmt.Errorf("bic: %w", err)
+		return ValidatedPaymentDetails{}, fmt.Errorf("bic: %w", err)
 	}
 
-	return ConfirmedPaymentDetails{
+	return ValidatedPaymentDetails{
 		Payee:     payee,
 		IBAN:      iban,
 		Amount:    amount,

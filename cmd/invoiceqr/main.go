@@ -90,7 +90,7 @@ func errNotImplemented(command string) error {
 	return errors.New(command + " is not implemented yet")
 }
 
-func printPaymentDetails(details invoiceqr.ConfirmedPaymentDetails) {
+func printPaymentDetails(details invoiceqr.ValidatedPaymentDetails) {
 	fmt.Println("Payment Details")
 	fmt.Printf("Payee: %s\n", details.Payee)
 	fmt.Printf("IBAN: %s\n", details.IBAN)

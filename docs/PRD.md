@@ -92,13 +92,37 @@ The tool supports manual input, validation-only checks, copied invoice text, and
 
 - Make `from-text` and `from-pdf` conservative: if multiple plausible IBANs or amounts are found, require explicit flags rather than guessing.
 
+- Deepen extraction into a Suggestion module. Its interface accepts text plus explicit flag overrides and returns either Suggested Payment Details or field-specific ambiguity and missing-field errors.
+
+- Treat `from-text`, `from-pdf`, and future OCR/LLM helpers as suggestion adapters. Each adapter may produce text or candidate fields, but none may produce Confirmed Payment Details or bypass confirmation.
+
+- Use `pdftotext` as the v1 PDF adapter and stream extracted text through the Suggestion module rather than writing trusted intermediate files.
+
 - Keep trusted core logic separate from extraction helpers.
 
+- Deepen the Confirmed Payment Details flow into a Payment Generation module. Its interface owns the trusted ordering: validate Payment Details, enforce confirmation policy, build the EPC payload, and write the QR output.
+
+- Keep CLI command modules shallow. `generate`, `from-text`, and `from-pdf` should collect inputs and call the Payment Generation module instead of each repeating validation, confirmation, payload, and output ordering.
+
+- Deepen Remittance Reference classification into one module. Its interface returns either a valid Belgian Structured Reference or valid Unstructured Remittance Information, and malformed Belgian-structured-looking input is an error.
+
+- Keep Belgian Structured Reference checksum rules and structured-versus-unstructured EPC placement out of CLI and extraction modules.
+
+- Deepen QR Output into one module. Its interface owns format inference, `--format` override handling, overwrite protection, `--force`, rendering, and filesystem writes.
+
+- Keep QR Output separate from QR rendering. Rendering turns an EPC payload into PNG/SVG bytes; QR Output decides where and whether those bytes may be written.
+
+- Do not add an external seam around validation primitives for v1. Keep IBAN, amount, and Remittance Reference validators internally testable, but expose whole Payment Details validation to callers.
+
 - Major modules:
-  - EPC payload builder: deterministic payload construction from Confirmed Payment Details.
-  - Validation: IBAN, amount, Belgian Structured Reference, and remittance limits.
-  - QR rendering: PNG/SVG output with compatibility defaults.
-  - Extraction: deterministic text parser and `pdftotext` wrapper that produce Suggested Payment Details only.
+  - Payment Generation: trusted flow from Payment Details to QR artifact, including validation, confirmation policy, EPC payload construction, and output write.
+  - Remittance Reference: classification and validation of Belgian Structured Reference versus Unstructured Remittance Information.
+  - EPC payload builder: deterministic payload construction from Confirmed Payment Details and classified Remittance Reference.
+  - Validation: IBAN, amount, and remittance limits, exposed through whole Payment Details validation where callers need payment-level guarantees.
+  - QR rendering: PNG/SVG byte rendering with compatibility defaults.
+  - QR Output: output format selection, overwrite policy, and filesystem writes.
+  - Suggestion: conservative extraction policy that combines parsed text candidates with explicit flag overrides into Suggested Payment Details.
+  - Extraction adapters: stdin/file text input, `pdftotext` PDF extraction, and future OCR/LLM helpers that feed the Suggestion module only.
   - Confirmation: payment-detail display and yes/no prompt.
   - CLI wiring: Kong commands, flag overrides, output behavior, and exit codes.
 
@@ -110,13 +134,23 @@ The tool supports manual input, validation-only checks, copied invoice text, and
 
 - Add Belgian Structured Reference tests for valid references, invalid checksums, malformed syntax, and unstructured fallback.
 
+- Add Remittance Reference classification tests that prove malformed Belgian-structured-looking input cannot become Unstructured Remittance Information.
+
 - Add IBAN validation tests for valid SEPA IBANs, invalid checksum, invalid characters, and spacing normalization.
 
 - Add amount tests for integer, one-decimal, two-decimal, over-precision, zero, negative, and malformed input.
 
+- Add Payment Generation tests around the trusted ordering: validation before confirmation, confirmation before output, and no QR write on validation or confirmation failure.
+
 - Add output-format tests for `.png`, `.svg`, unknown extension, and `--format` override.
 
+- Add QR Output tests for overwrite refusal, `--force`, render/write error propagation, and no partial write on failed preflight where feasible.
+
 - Add extraction tests for clear invoice text, missing fields, multiple IBANs, multiple amounts, flag overrides, and Belgian structured-reference detection.
+
+- Add Suggestion module tests proving ambiguity policy is shared by `from-text` and `from-pdf` inputs, and that flag overrides are explicit.
+
+- Add extraction adapter tests with `pdftotext` command execution behind an injected adapter or command runner, so tests do not require a local PDF tool.
 
 - Add focused confirmation behavior tests where feasible with injected input/output.
 

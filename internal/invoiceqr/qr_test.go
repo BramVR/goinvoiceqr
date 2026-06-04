@@ -192,6 +192,30 @@ func TestWriteQRArtifactAllowsForceOverwrite(t *testing.T) {
 	}
 }
 
+func TestWriteQRArtifactRefusesForceSymlinkOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.svg")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(target, []byte("target"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	if err := os.Symlink(target, out); err != nil {
+		t.Fatalf("seed symlink: %v", err)
+	}
+
+	err := WriteQRArtifact(sampleEPCPayload, QROutputOptions{Out: out, Force: true})
+	if err == nil {
+		t.Fatalf("expected symlink overwrite error")
+	}
+	got, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read target: %v", readErr)
+	}
+	if string(got) != "target" {
+		t.Fatalf("expected symlink target to remain unchanged, got %q", got)
+	}
+}
+
 func TestWriteQRArtifactUsesFormatOverride(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.qr")

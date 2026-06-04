@@ -178,7 +178,7 @@ func confirmPaymentDetails(details invoiceqr.ValidatedPaymentDetails) (bool, err
 	return confirmPaymentDetailsWithInput(details, os.Stdin)
 }
 
-var terminalInputPath = "/dev/tty"
+var terminalInputPath = defaultTerminalInputPath()
 
 func confirmPaymentDetailsFromTerminal(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
 	terminal, err := os.Open(terminalInputPath)
@@ -194,7 +194,10 @@ func confirmPaymentDetailsWithInput(details invoiceqr.ValidatedPaymentDetails, i
 	fmt.Print("Write QR artifact? [y/N]: ")
 
 	answer, err := bufio.NewReader(input).ReadString('\n')
-	if err != nil && answer == "" {
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false, err
+	}
+	if errors.Is(err, io.EOF) && answer == "" {
 		return false, err
 	}
 	switch strings.ToLower(strings.TrimSpace(answer)) {

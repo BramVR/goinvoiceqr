@@ -16,7 +16,7 @@ Read when changing `from-text`, `from-pdf`, suggestion parsing, amount parsing, 
 ## Flow
 
 - CLI adapters read text from a file, stdin, or `pdftotext` PDF extraction.
-- The Suggestion module extracts candidates and refuses missing required fields.
+- The Suggestion module extracts candidates and reports required-field errors for missing details.
 - Explicit flags override suggested fields.
 - Multiple plausible IBANs or amounts are ambiguity errors unless flags resolve them.
 - Suggested Payment Details are validated by the trusted payment-generation path.

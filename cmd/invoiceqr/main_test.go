@@ -1,11 +1,15 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/bramvr/goinvoiceqr/internal/invoiceqr"
 )
 
 func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
@@ -351,6 +355,9 @@ func TestFromTextRejectsYesFlag(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected --yes to fail for from-text, output:\n%s", output)
 	}
+	if !strings.Contains(strings.ToLower(string(output)), "unknown flag") || !strings.Contains(string(output), "--yes") {
+		t.Fatalf("expected unknown --yes flag error, output:\n%s", output)
+	}
 }
 
 func TestFromPDFInvokesPdftotextAndWritesAfterConfirmation(t *testing.T) {
@@ -461,6 +468,35 @@ func TestFromPDFRejectsYesFlag(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected --yes to fail for from-pdf, output:\n%s", output)
 	}
+	if !strings.Contains(strings.ToLower(string(output)), "unknown flag") || !strings.Contains(string(output), "--yes") {
+		t.Fatalf("expected unknown --yes flag error, output:\n%s", output)
+	}
+}
+
+func TestConfirmationReturnsReadErrors(t *testing.T) {
+	readErr := errors.New("terminal read failed")
+	confirmed, err := confirmPaymentDetailsWithInput(validConfirmationDetails(), failingReader{
+		data: []byte("yes"),
+		err:  readErr,
+	})
+
+	if !errors.Is(err, readErr) {
+		t.Fatalf("expected read error, got %v", err)
+	}
+	if confirmed {
+		t.Fatalf("expected no confirmation when read fails")
+	}
+}
+
+func TestConfirmationAcceptsEOFAfterAnswer(t *testing.T) {
+	confirmed, err := confirmPaymentDetailsWithInput(validConfirmationDetails(), strings.NewReader("yes"))
+
+	if err != nil {
+		t.Fatalf("expected EOF after answer to be accepted, got %v", err)
+	}
+	if !confirmed {
+		t.Fatalf("expected confirmation")
+	}
 }
 
 func assertSVGOutput(t *testing.T, path string) {
@@ -512,4 +548,30 @@ func withPDFTextCommandRunner(t *testing.T, runner commandRunner) {
 	t.Cleanup(func() {
 		pdfTextCommandRunner = oldRunner
 	})
+}
+
+func validConfirmationDetails() invoiceqr.ValidatedPaymentDetails {
+	return invoiceqr.ValidatedPaymentDetails{
+		Payee:  "ACME BV",
+		IBAN:   "BE68539007547034",
+		Amount: "42.50",
+		Reference: invoiceqr.RemittanceReference{
+			Kind:  invoiceqr.UnstructuredReference,
+			Value: "INV-1",
+		},
+	}
+}
+
+type failingReader struct {
+	data []byte
+	err  error
+	done bool
+}
+
+func (reader failingReader) Read(p []byte) (int, error) {
+	if reader.done {
+		return 0, io.EOF
+	}
+	copy(p, reader.data)
+	return len(reader.data), reader.err
 }

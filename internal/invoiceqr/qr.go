@@ -130,6 +130,13 @@ func parseQRFormat(input string) (QRFormat, error) {
 
 func writeFile(path string, data []byte, force bool) error {
 	if force {
+		info, err := os.Lstat(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("already exists as symlink; refusing to overwrite")
+		}
 		return os.WriteFile(path, data, 0o644)
 	}
 

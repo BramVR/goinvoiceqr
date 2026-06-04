@@ -62,7 +62,7 @@ func chooseField(name, override string, candidates []string, ambiguous bool) (st
 	}
 	switch len(candidates) {
 	case 0:
-		return "", fmt.Errorf("%s: missing", name)
+		return "", fmt.Errorf("%s: required", name)
 	case 1:
 		return candidates[0], nil
 	default:

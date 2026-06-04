@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/alecthomas/kong"
 	"github.com/bramvr/goinvoiceqr/internal/invoiceqr"
@@ -39,6 +42,14 @@ type QROutputFlags struct {
 	Force  bool   `help:"Overwrite an existing output file."`
 }
 
+func (flags QROutputFlags) qrOutputOptions() invoiceqr.QROutputOptions {
+	return invoiceqr.QROutputOptions{
+		Out:    flags.Out,
+		Format: flags.Format,
+		Force:  flags.Force,
+	}
+}
+
 type ConfirmationFlags struct {
 	Yes bool `help:"Skip confirmation for manual payment details."`
 }
@@ -49,8 +60,15 @@ type GenerateCmd struct {
 	ConfirmationFlags   `embed:""`
 }
 
-func (GenerateCmd) Run() error {
-	return errNotImplemented("generate")
+func (cmd GenerateCmd) Run() error {
+	return invoiceqr.GeneratePaymentArtifact(
+		invoiceqr.PaymentGenerationOptions{
+			Details:          cmd.paymentDetails(),
+			Output:           cmd.qrOutputOptions(),
+			SkipConfirmation: cmd.Yes,
+		},
+		confirmPaymentDetails,
+	)
 }
 
 type ValidateCmd struct {
@@ -107,6 +125,22 @@ func referenceTypeLabel(kind invoiceqr.RemittanceKind) string {
 		return "Belgian Structured Reference"
 	}
 	return "Unstructured Remittance Information"
+}
+
+func confirmPaymentDetails(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+	printPaymentDetails(details)
+	fmt.Print("Write QR artifact? [y/N]: ")
+
+	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && answer == "" {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func main() {

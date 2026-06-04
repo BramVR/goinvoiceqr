@@ -3,6 +3,7 @@ package invoiceqr
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,7 +63,7 @@ func WriteQRArtifact(payload string, options QROutputOptions) error {
 }
 
 type qrRenderFunc func(string, QRFormat) ([]byte, error)
-type qrWriteFunc func(string, []byte) error
+type qrWriteFunc func(string, []byte, bool) error
 type qrExistsFunc func(string) (bool, error)
 
 func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFunc, write qrWriteFunc, exists qrExistsFunc) error {
@@ -87,7 +88,7 @@ func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFun
 	if err != nil {
 		return err
 	}
-	if err := write(out, data); err != nil {
+	if err := write(out, data, options.Force); err != nil {
 		return fmt.Errorf("out: %w", err)
 	}
 	return nil
@@ -119,8 +120,25 @@ func parseQRFormat(input string) (QRFormat, error) {
 	}
 }
 
-func writeFile(path string, data []byte) error {
-	return os.WriteFile(path, data, 0o644)
+func writeFile(path string, data []byte, force bool) error {
+	if force {
+		return os.WriteFile(path, data, 0o644)
+	}
+
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	written, err := file.Write(data)
+	if err != nil {
+		return err
+	}
+	if written != len(data) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 func pathExists(path string) (bool, error) {

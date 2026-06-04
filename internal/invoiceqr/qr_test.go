@@ -123,6 +123,34 @@ func TestWriteQRArtifactRefusesDanglingSymlinkOverwrite(t *testing.T) {
 	}
 }
 
+func TestWriteQRArtifactRefusesRaceOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "invoice.svg")
+	err := writeQRArtifact(
+		sampleEPCPayload,
+		QROutputOptions{Out: out},
+		func(string, QRFormat) ([]byte, error) { return []byte("<svg>new</svg>"), nil },
+		writeFile,
+		func(string) (bool, error) {
+			if err := os.WriteFile(out, []byte("raced"), 0o644); err != nil {
+				return false, err
+			}
+			return false, nil
+		},
+	)
+
+	if err == nil {
+		t.Fatalf("expected exclusive write error")
+	}
+	got, readErr := os.ReadFile(out)
+	if readErr != nil {
+		t.Fatalf("read output: %v", readErr)
+	}
+	if string(got) != "raced" {
+		t.Fatalf("expected raced content to remain, got %q", got)
+	}
+}
+
 func TestWriteQRArtifactAllowsForceOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")
@@ -167,7 +195,7 @@ func TestWriteQRArtifactPropagatesRenderError(t *testing.T) {
 		sampleEPCPayload,
 		QROutputOptions{Out: "invoice.png"},
 		func(string, QRFormat) ([]byte, error) { return nil, renderErr },
-		func(string, []byte) error {
+		func(string, []byte, bool) error {
 			writeCalled = true
 			return nil
 		},
@@ -188,7 +216,7 @@ func TestWriteQRArtifactPropagatesWriteError(t *testing.T) {
 		sampleEPCPayload,
 		QROutputOptions{Out: "invoice.svg"},
 		func(string, QRFormat) ([]byte, error) { return []byte("<svg></svg>"), nil },
-		func(string, []byte) error { return writeErr },
+		func(string, []byte, bool) error { return writeErr },
 		func(string) (bool, error) { return false, nil },
 	)
 

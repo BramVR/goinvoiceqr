@@ -22,6 +22,10 @@ Read when changing `from-text`, `from-pdf`, suggestion parsing, amount parsing, 
 - Suggested Payment Details are validated by the trusted payment-generation path.
 - Suggested details always require confirmation before writing a QR artifact.
 
+## Safety
+
+PDF extraction, copied text, OCR, and AI may produce Suggested Payment Details only. They must not create Confirmed Payment Details, skip validation, skip confirmation, or write QR output without the same deterministic payment-generation path used for manual details.
+
 ## Amounts
 
 Suggested amounts are parsed as complete numeric tokens. Plain decimals such as `42.50` and `42,50` are accepted, and common thousands formats such as `1.234,56`, `1,234.56`, and `1 234,56` normalize to `1234.56`. Regular, non-breaking, and narrow non-breaking spaces are accepted as grouping whitespace.

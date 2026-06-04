@@ -263,6 +263,9 @@ func normalizeAmount(input string) (string, error) {
 	if cents == "" {
 		cents = "0"
 	}
+	if len(cents) > 9 {
+		return "", errors.New("must be at most 999999999.99")
+	}
 	return cents + "." + fraction, nil
 }
 
@@ -294,7 +297,8 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 		if fmt.Sprintf("%02d", remainder) != check {
 			return RemittanceReference{}, errors.New("invalid Belgian Structured Reference checksum")
 		}
-		return RemittanceReference{Kind: StructuredReference, Value: reference}, nil
+		standardReference := fmt.Sprintf("+++%s/%s/%s+++", match[1], match[2], match[3])
+		return RemittanceReference{Kind: StructuredReference, Value: standardReference}, nil
 	}
 	if looksLikeBelgianStructuredReference(reference) {
 		return RemittanceReference{}, errors.New("malformed Belgian Structured Reference")

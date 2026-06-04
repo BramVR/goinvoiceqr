@@ -47,6 +47,9 @@ func TestValidatePaymentDetailsAcceptsDocumentedStructuredReferenceSyntax(t *tes
 	if details.Reference.Kind != StructuredReference {
 		t.Fatalf("reference kind = %v", details.Reference.Kind)
 	}
+	if details.Reference.Value != "+++123/4567/89002+++" {
+		t.Fatalf("reference value = %q", details.Reference.Value)
+	}
 }
 
 func TestValidatePaymentDetailsAcceptsSEPAIBANAndUnstructuredReference(t *testing.T) {
@@ -144,6 +147,11 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 		{
 			name:     "over precise amount",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.234", Reference: "INV-1"},
+			contains: "amount",
+		},
+		{
+			name:     "amount over epc limit",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1000000000.00", Reference: "INV-1"},
 			contains: "amount",
 		},
 		{

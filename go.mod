@@ -1,4 +1,4 @@
-module github.com/BramVR/goinvoiceqr
+module github.com/bramvr/goinvoiceqr
 
 go 1.24
 

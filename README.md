@@ -32,4 +32,4 @@ go run ./cmd/invoiceqr from-text
 go run ./cmd/invoiceqr from-pdf
 ```
 
-The command implementations currently return placeholder errors until their payment-generation slices are implemented.
+The command implementations currently return placeholder errors until their payment-generation modules are implemented.

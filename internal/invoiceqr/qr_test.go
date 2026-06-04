@@ -9,9 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	goqr "github.com/piglig/go-qr"
 )
 
 const sampleEPCPayload = "BCD\n002\n1\nSCT\n\nACME BV\nBE68539007547034\nEUR42.50\n\n+++123/4567/89002+++\n\n"
+const shortEPCPayload = "BCD\n002\n1\nSCT\n\nA\nBE68539007547034\nEUR1.00\n\nX\n\n"
 
 func TestRenderQRCodePNG(t *testing.T) {
 	data, err := RenderQRCode(sampleEPCPayload, QRFormatPNG)
@@ -47,6 +50,24 @@ func TestRenderQRCodeSVG(t *testing.T) {
 	}
 	if !strings.Contains(text, `<path d="M40,40`) {
 		t.Fatalf("expected SVG modules to start after four-module quiet zone, got %q", text[:min(len(text), 160)])
+	}
+}
+
+func TestRenderQRCodeUsesMediumErrorCorrection(t *testing.T) {
+	data, err := RenderQRCode(shortEPCPayload, QRFormatPNG)
+	if err != nil {
+		t.Fatalf("expected png, got %v", err)
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("expected decodable PNG, got %v", err)
+	}
+	decoded, err := goqr.DecodeDetailed(img)
+	if err != nil {
+		t.Fatalf("expected decodable QR, got %v", err)
+	}
+	if decoded.Ecc != goqr.Medium {
+		t.Fatalf("expected medium error correction, got %v", decoded.Ecc)
 	}
 }
 

@@ -34,7 +34,7 @@ func RenderQRCode(payload string, format QRFormat) ([]byte, error) {
 		return nil, fmt.Errorf("format: unsupported %q", format)
 	}
 
-	qr, err := goqr.EncodeText(payload, goqr.Medium)
+	qr, err := encodeQRCode(payload)
 	if err != nil {
 		return nil, fmt.Errorf("qr render: %w", err)
 	}
@@ -47,6 +47,14 @@ func RenderQRCode(payload string, format QRFormat) ([]byte, error) {
 		return qr.ToSVGBytes(config)
 	}
 	return nil, fmt.Errorf("format: unsupported %q", format)
+}
+
+func encodeQRCode(payload string) (*goqr.QrCode, error) {
+	segments, err := goqr.MakeSegments(payload)
+	if err != nil {
+		return nil, err
+	}
+	return goqr.EncodeSegments(segments, goqr.Medium, goqr.MinVersion, goqr.MaxVersion, -1, false)
 }
 
 func qrCodeImgConfig(format QRFormat) *goqr.QrCodeImgConfig {
@@ -129,16 +137,17 @@ func writeFile(path string, data []byte, force bool) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
 	written, err := file.Write(data)
 	if err != nil {
+		_ = file.Close()
 		return err
 	}
 	if written != len(data) {
+		_ = file.Close()
 		return io.ErrShortWrite
 	}
-	return nil
+	return file.Close()
 }
 
 func pathExists(path string) (bool, error) {

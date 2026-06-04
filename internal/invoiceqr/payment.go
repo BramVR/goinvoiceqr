@@ -47,6 +47,9 @@ func ValidatePaymentDetails(details PaymentDetails) (ConfirmedPaymentDetails, er
 	if len([]rune(payee)) > 70 {
 		return ConfirmedPaymentDetails{}, errors.New("payee: must be at most 70 characters")
 	}
+	if hasControlCharacter(payee) {
+		return ConfirmedPaymentDetails{}, errors.New("payee: must not contain control characters")
+	}
 
 	iban, err := normalizeIBAN(details.IBAN)
 	if err != nil {
@@ -214,6 +217,9 @@ func classifyRemittanceReference(input string) (RemittanceReference, error) {
 	if len([]rune(reference)) > 140 {
 		return RemittanceReference{}, errors.New("must be at most 140 characters")
 	}
+	if hasControlCharacter(reference) {
+		return RemittanceReference{}, errors.New("must not contain control characters")
+	}
 	if strings.HasPrefix(reference, "+++") || strings.HasSuffix(reference, "+++") {
 		match := structuredReferencePattern.FindStringSubmatch(reference)
 		if match == nil {
@@ -247,12 +253,21 @@ func normalizeBIC(input string) (string, error) {
 		switch {
 		case i < 4 && r >= 'A' && r <= 'Z':
 		case i >= 4 && i < 6 && r >= 'A' && r <= 'Z':
-		case i >= 6 && ((r >= 'A' && r <= 'Z') || unicode.IsDigit(r)):
+		case i >= 6 && ((r >= 'A' && r <= 'Z') || asciiDigit(r)):
 		default:
 			return "", errors.New("must be a valid SWIFT/BIC code")
 		}
 	}
 	return bic, nil
+}
+
+func hasControlCharacter(input string) bool {
+	for _, r := range input {
+		if unicode.IsControl(r) {
+			return true
+		}
+	}
+	return false
 }
 
 func removeSpace(input string) string {

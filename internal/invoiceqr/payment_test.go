@@ -169,13 +169,28 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 			contains: "bic",
 		},
 		{
+			name:     "invalid bic unicode digit",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1", BIC: "GEBABE١"},
+			contains: "bic",
+		},
+		{
 			name:     "payee over character limit",
 			details:  PaymentDetails{Payee: strings.Repeat("A", 71), IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1"},
 			contains: "payee",
 		},
 		{
+			name:     "payee line break",
+			details:  PaymentDetails{Payee: "ACME\nBV", IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1"},
+			contains: "payee",
+		},
+		{
 			name:     "reference over character limit",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: strings.Repeat("A", 141)},
+			contains: "reference",
+		},
+		{
+			name:     "reference line break",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1\nnext"},
 			contains: "reference",
 		},
 	}

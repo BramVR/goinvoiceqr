@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/alecthomas/kong"
+	"github.com/bramvr/goinvoiceqr/internal/invoiceqr"
 )
 
 type CLI struct {
@@ -19,6 +21,16 @@ type PaymentDetailsFlags struct {
 	Amount    string `help:"Payment amount in EUR."`
 	Reference string `help:"Remittance reference."`
 	BIC       string `help:"Optional payee BIC."`
+}
+
+func (flags PaymentDetailsFlags) paymentDetails() invoiceqr.PaymentDetails {
+	return invoiceqr.PaymentDetails{
+		Payee:     flags.Payee,
+		IBAN:      flags.IBAN,
+		Amount:    flags.Amount,
+		Reference: flags.Reference,
+		BIC:       flags.BIC,
+	}
 }
 
 type QROutputFlags struct {
@@ -45,8 +57,13 @@ type ValidateCmd struct {
 	PaymentDetailsFlags `embed:""`
 }
 
-func (ValidateCmd) Run() error {
-	return errNotImplemented("validate")
+func (cmd ValidateCmd) Run() error {
+	details, err := invoiceqr.ValidatePaymentDetails(cmd.paymentDetails())
+	if err != nil {
+		return err
+	}
+	printPaymentDetails(details)
+	return nil
 }
 
 type FromTextCmd struct {
@@ -71,6 +88,25 @@ func (FromPDFCmd) Run() error {
 
 func errNotImplemented(command string) error {
 	return errors.New(command + " is not implemented yet")
+}
+
+func printPaymentDetails(details invoiceqr.ConfirmedPaymentDetails) {
+	fmt.Println("Payment Details")
+	fmt.Printf("Payee: %s\n", details.Payee)
+	fmt.Printf("IBAN: %s\n", details.IBAN)
+	fmt.Printf("Amount: EUR%s\n", details.Amount)
+	if details.BIC != "" {
+		fmt.Printf("BIC: %s\n", details.BIC)
+	}
+	fmt.Printf("Reference: %s\n", details.Reference.Value)
+	fmt.Printf("Reference Type: %s\n", referenceTypeLabel(details.Reference.Kind))
+}
+
+func referenceTypeLabel(kind invoiceqr.RemittanceKind) string {
+	if kind == invoiceqr.StructuredReference {
+		return "Belgian Structured Reference"
+	}
+	return "Unstructured Remittance Information"
 }
 
 func main() {

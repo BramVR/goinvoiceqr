@@ -278,31 +278,51 @@ func TestFromTextFilePromptsAndWritesAfterConfirmation(t *testing.T) {
 	assertSVGOutput(t, out)
 }
 
-func TestFromTextStdinUsesOverridesAndStillRequiresConfirmation(t *testing.T) {
-	out := filepath.Join(t.TempDir(), "invoice.svg")
-	cmd := exec.Command("go", "run", ".", "from-text",
-		"--amount", "10",
-		"--reference", "MANUAL-REF",
-		"--out", out,
-	)
-	cmd.Stdin = strings.NewReader(clearInvoiceText())
+func TestFromTextStdinUsesOverridesAndTerminalConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "invoice.svg")
+	input, err := os.CreateTemp(dir, "invoice-*.txt")
+	if err != nil {
+		t.Fatalf("create input: %v", err)
+	}
+	if _, err := input.WriteString(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Total: EUR 12.00
+Reference: INV-2026-001
+`); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	if _, err := input.Seek(0, 0); err != nil {
+		t.Fatalf("seek input: %v", err)
+	}
+	confirmationPath := filepath.Join(dir, "confirmation.txt")
+	if err := os.WriteFile(confirmationPath, []byte("yes\n"), 0o644); err != nil {
+		t.Fatalf("write confirmation: %v", err)
+	}
 
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected confirmation failure, output:\n%s", output)
+	oldStdin := os.Stdin
+	oldTerminalInputPath := terminalInputPath
+	os.Stdin = input
+	terminalInputPath = confirmationPath
+	defer func() {
+		os.Stdin = oldStdin
+		terminalInputPath = oldTerminalInputPath
+		input.Close()
+	}()
+
+	cmd := FromTextCmd{
+		PaymentDetailsFlags: PaymentDetailsFlags{
+			Amount:    "10",
+			Reference: "MANUAL-REF",
+		},
+		QROutputFlags: QROutputFlags{Out: out},
 	}
-	for _, want := range []string{
-		"Amount: EUR10.00",
-		"Reference: MANUAL-REF",
-		"Write QR artifact?",
-	} {
-		if !strings.Contains(string(output), want) {
-			t.Fatalf("expected output to contain %q, got:\n%s", want, output)
-		}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("expected from-text stdin to succeed, got %v", err)
 	}
-	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
-		t.Fatalf("expected no output file, got stat err %v", statErr)
-	}
+	assertSVGOutput(t, out)
 }
 
 func TestFromTextMissingFieldDoesNotPromptOrWrite(t *testing.T) {

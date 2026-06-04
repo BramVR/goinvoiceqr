@@ -45,7 +45,7 @@ var (
 	payeeLinePattern     = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
 	referenceLinePattern = regexp.MustCompile(`(?im)^\s*(?:reference|communication|remittance|mededeling|invoice)\s*:\s*(.+?)\s*$`)
 	ibanCandidatePattern = regexp.MustCompile(`(?i)\b[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
-	amountLinePattern    = regexp.MustCompile(`(?im)\b(?:amount|total|bedrag|totaal|montant)\b[^\n0-9-]*([0-9]+(?:[,.][0-9]{1,2})?)`)
+	amountLinePattern    = regexp.MustCompile(`(?im)\b(?:amount|total|bedrag|totaal|montant)\b[^\n0-9-]*([0-9](?:[0-9., \t]*[0-9])?)`)
 	structuredRefPattern = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
 )
 
@@ -98,17 +98,90 @@ func findAmountCandidates(text string) []string {
 	values := []string{}
 	seen := map[string]bool{}
 	for _, match := range matches {
-		candidate := strings.TrimSpace(match[1])
-		normalized, err := normalizeAmount(candidate)
+		normalized, err := normalizeSuggestedAmount(match[1])
 		if err != nil {
 			continue
 		}
 		if !seen[normalized] {
 			seen[normalized] = true
-			values = append(values, candidate)
+			values = append(values, normalized)
 		}
 	}
 	return values
+}
+
+func normalizeSuggestedAmount(input string) (string, error) {
+	amount := strings.Join(strings.Fields(input), "")
+	lastDot := strings.LastIndex(amount, ".")
+	lastComma := strings.LastIndex(amount, ",")
+
+	switch {
+	case lastDot >= 0 && lastComma >= 0:
+		thousandsSeparator := ","
+		decimalIndex := lastDot
+		if lastComma > lastDot {
+			thousandsSeparator = "."
+			decimalIndex = lastComma
+		}
+		integer := amount[:decimalIndex]
+		fraction := amount[decimalIndex+1:]
+		if !validFraction(fraction) {
+			return "", fmt.Errorf("malformed")
+		}
+		if strings.Contains(integer, thousandsSeparator) {
+			if !validGroupedInteger(integer, thousandsSeparator) {
+				return "", fmt.Errorf("malformed")
+			}
+			integer = strings.ReplaceAll(integer, thousandsSeparator, "")
+		}
+		return normalizeAmount(integer + "." + fraction)
+	case lastDot >= 0:
+		return normalizeSingleSeparatorAmount(amount, ".")
+	case lastComma >= 0:
+		return normalizeSingleSeparatorAmount(amount, ",")
+	default:
+		return normalizeAmount(amount)
+	}
+}
+
+func normalizeSingleSeparatorAmount(amount, separator string) (string, error) {
+	parts := strings.Split(amount, separator)
+	if len(parts) == 2 && validFraction(parts[1]) {
+		return normalizeAmount(parts[0] + "." + parts[1])
+	}
+	if validGroupedInteger(amount, separator) {
+		return normalizeAmount(strings.ReplaceAll(amount, separator, ""))
+	}
+	return "", fmt.Errorf("malformed")
+}
+
+func validFraction(value string) bool {
+	return len(value) >= 1 && len(value) <= 2 && asciiDigits(value)
+}
+
+func validGroupedInteger(value, separator string) bool {
+	parts := strings.Split(value, separator)
+	if len(parts) < 2 || len(parts[0]) < 1 || len(parts[0]) > 3 || !asciiDigits(parts[0]) {
+		return false
+	}
+	for _, part := range parts[1:] {
+		if len(part) != 3 || !asciiDigits(part) {
+			return false
+		}
+	}
+	return true
+}
+
+func asciiDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if !asciiDigit(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func findReferenceCandidates(text string) []string {

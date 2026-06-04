@@ -100,12 +100,16 @@ func (cmd FromTextCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	confirm := confirmPaymentDetails
+	if cmd.File == "" {
+		confirm = confirmPaymentDetailsFromTerminal
+	}
 	return invoiceqr.GeneratePaymentArtifact(
 		invoiceqr.PaymentGenerationOptions{
 			Details: suggestionPaymentDetails(suggestion),
 			Output:  cmd.qrOutputOptions(),
 		},
-		confirmPaymentDetails,
+		confirm,
 	)
 }
 
@@ -143,10 +147,25 @@ func referenceTypeLabel(kind invoiceqr.RemittanceKind) string {
 }
 
 func confirmPaymentDetails(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+	return confirmPaymentDetailsWithInput(details, os.Stdin)
+}
+
+var terminalInputPath = "/dev/tty"
+
+func confirmPaymentDetailsFromTerminal(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+	terminal, err := os.Open(terminalInputPath)
+	if err != nil {
+		return false, err
+	}
+	defer terminal.Close()
+	return confirmPaymentDetailsWithInput(details, terminal)
+}
+
+func confirmPaymentDetailsWithInput(details invoiceqr.ValidatedPaymentDetails, input io.Reader) (bool, error) {
 	printPaymentDetails(details)
 	fmt.Print("Write QR artifact? [y/N]: ")
 
-	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && answer == "" {
 		return false, err
 	}

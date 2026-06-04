@@ -1,4 +1,17 @@
+---
+summary: "Product requirements for invoiceqr payment validation, EPC QR generation, suggestions, confirmation, and extraction safety."
+read_when: "Planning or changing invoiceqr behavior, command scope, trusted payment generation, validation, suggestions, or tests."
+---
+
 # PRD: invoiceqr
+
+## Summary
+
+Product requirements for `invoiceqr`: validate payment details, build deterministic EPC/SEPA QR payloads, support manual and suggested payment details, and require confirmation for untrusted extraction paths.
+
+## Read when
+
+Read when planning or changing command behavior, payment validation, suggestion extraction, QR output, confirmation policy, or test coverage.
 
 ## Problem Statement
 

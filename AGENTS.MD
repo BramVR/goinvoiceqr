@@ -11,6 +11,12 @@
 - Build: `go build ./...` unless a narrower package target exists.
 - Run CLI locally with `go run ...` until a binary target exists.
 
+## Docs
+- Docs live in `docs/`.
+- Before coding or PR, check relevant docs with `/Users/bram/Projects/agent-scripts/bin/docs-list`.
+- Docs should include `summary` and `read_when` front matter plus `## Summary` and `## Read when` headings.
+- Update docs for user-visible behavior changes.
+
 ## Coding Style & Naming
 - Keep changes small and scoped.
 - Prefer typed, deterministic core logic.

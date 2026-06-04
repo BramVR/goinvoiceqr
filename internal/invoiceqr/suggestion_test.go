@@ -47,6 +47,54 @@ Reference: INV-2026-001
 	})
 }
 
+func TestSuggestPaymentDetailsFromTextParsesThousandsSeparatedAmounts(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+	}{
+		{name: "belgian", text: "Amount: EUR 1.234,56"},
+		{name: "english", text: "Amount: EUR 1,234.56"},
+		{name: "integer", text: "Amount: EUR 1.234"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+`+tt.text+`
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err != nil {
+				t.Fatalf("expected suggestion, got %v", err)
+			}
+			if suggestion.Amount != "1234.56" && tt.name != "integer" {
+				t.Fatalf("amount = %q, want 1234.56", suggestion.Amount)
+			}
+			if suggestion.Amount != "1234.00" && tt.name == "integer" {
+				t.Fatalf("amount = %q, want 1234.00", suggestion.Amount)
+			}
+		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotTruncateMalformedThousandsAmount(t *testing.T) {
+	_, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 1.234,567
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected amount error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "amount") {
+		t.Fatalf("expected amount error, got %v", err)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextReportsMissingFields(t *testing.T) {
 	_, err := SuggestPaymentDetailsFromText(`
 Payee: ACME BV

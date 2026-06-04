@@ -1,3 +1,14 @@
+---
+summary: "ADR for generating EPC QR version 002 payloads with optional BIC."
+read_when: "Changing EPC payload version, BIC handling, or SEPA compatibility behavior."
+---
+
 # Use EPC Version 2 With Optional BIC
 
+## Summary
+
 Belgian banking apps support EPC QR version `002`, where BIC is optional for SEPA credit transfers. `invoiceqr` generates version `002` payloads with an empty BIC line by default, while keeping BIC as an optional field for compatibility with payees or banks that still provide it.
+
+## Read when
+
+Read when changing EPC payload version, BIC handling, SEPA compatibility defaults, or banking-app QR compatibility assumptions.

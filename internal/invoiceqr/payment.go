@@ -311,16 +311,20 @@ func looksLikeBelgianStructuredReference(reference string) bool {
 		body = strings.TrimSpace(body[1:])
 	}
 	hasDigit := false
+	hasSlash := false
+	onlyDigitsSeparatorsAndSpace := true
 	for _, r := range body {
 		switch {
 		case asciiDigit(r):
 			hasDigit = true
-		case r == '/' || unicode.IsSpace(r):
+		case r == '/':
+			hasSlash = true
+		case unicode.IsSpace(r):
 		default:
-			return false
+			onlyDigitsSeparatorsAndSpace = false
 		}
 	}
-	return hasDigit
+	return hasDigit && (hasSlash || onlyDigitsSeparatorsAndSpace)
 }
 
 func normalizeBIC(input string) (string, error) {

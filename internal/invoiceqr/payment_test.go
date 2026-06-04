@@ -192,6 +192,11 @@ func TestValidatePaymentDetailsRejectsFieldSpecificFailures(t *testing.T) {
 			contains: "reference",
 		},
 		{
+			name:     "structured reference with letter typo",
+			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "+++123/4567/8900A+++"},
+			contains: "reference",
+		},
+		{
 			name:     "invalid bic length",
 			details:  PaymentDetails{Payee: "ACME", IBAN: "BE68539007547034", Amount: "1.00", Reference: "INV-1", BIC: "GEBABEB"},
 			contains: "bic",

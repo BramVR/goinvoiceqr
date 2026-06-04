@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 type SuggestedPaymentDetails struct {
@@ -42,12 +43,16 @@ func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (Sugge
 }
 
 var (
-	payeeLinePattern     = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
-	referenceLinePattern = regexp.MustCompile(`(?im)^\s*(?:reference|communication|remittance|mededeling|invoice)\s*:\s*(.+?)\s*$`)
-	ibanCandidatePattern = regexp.MustCompile(`(?i)\b[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
-	amountLinePattern    = regexp.MustCompile(`(?im)\b(?:amount|total|bedrag|totaal|montant)\b[^\n0-9-]*([0-9](?:[0-9.,\p{Zs}\t]*[0-9])?)`)
-	structuredRefPattern = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
+	payeeLinePattern      = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
+	referenceLinePattern  = regexp.MustCompile(`(?im)^\s*(?:reference|communication|remittance|mededeling|invoice)\s*:\s*(.+?)\s*$`)
+	ibanCandidatePattern  = regexp.MustCompile(`(?i)\b[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
+	amountLinePattern     = regexp.MustCompile(`(?im)^\s*(?:amount|total|bedrag|totaal|montant)\b[^\n]*`)
+	amountTokenPattern    = regexp.MustCompile(amountTokenPatternText)
+	currencyAmountPattern = regexp.MustCompile(`(?i)(?:EUR|€)\s*(` + amountTokenPatternText + `)|(` + amountTokenPatternText + `)\s*(?:EUR|€)`)
+	structuredRefPattern  = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
 )
+
+const amountTokenPatternText = `[0-9](?:[0-9.,\p{Zs}\t]*[0-9])?`
 
 func chooseField(name, override string, candidates []string, ambiguous bool) (string, error) {
 	if strings.TrimSpace(override) != "" {
@@ -94,24 +99,42 @@ func findIBANCandidates(text string) []string {
 }
 
 func findAmountCandidates(text string) []string {
-	matches := amountLinePattern.FindAllStringSubmatch(text, -1)
+	lines := amountLinePattern.FindAllString(text, -1)
 	values := []string{}
 	seen := map[string]bool{}
-	for _, match := range matches {
-		normalized, err := normalizeSuggestedAmount(match[1])
-		if err != nil {
-			continue
-		}
-		if !seen[normalized] {
-			seen[normalized] = true
-			values = append(values, normalized)
+	for _, line := range lines {
+		for _, candidate := range findAmountCandidatesInLine(line) {
+			normalized, err := normalizeSuggestedAmount(candidate)
+			if err != nil {
+				continue
+			}
+			if !seen[normalized] {
+				seen[normalized] = true
+				values = append(values, normalized)
+			}
 		}
 	}
 	return values
 }
 
+func findAmountCandidatesInLine(line string) []string {
+	currencyMatches := currencyAmountPattern.FindAllStringSubmatch(line, -1)
+	candidates := []string{}
+	for _, match := range currencyMatches {
+		if match[1] != "" {
+			candidates = append(candidates, match[1])
+		} else {
+			candidates = append(candidates, match[2])
+		}
+	}
+	if len(candidates) > 0 {
+		return candidates
+	}
+	return amountTokenPattern.FindAllString(line, -1)
+}
+
 func normalizeSuggestedAmount(input string) (string, error) {
-	amount := strings.Join(strings.Fields(input), "")
+	amount := normalizeAmountWhitespace(input)
 	lastDot := strings.LastIndex(amount, ".")
 	lastComma := strings.LastIndex(amount, ",")
 
@@ -128,17 +151,20 @@ func normalizeSuggestedAmount(input string) (string, error) {
 		if !validFraction(fraction) {
 			return "", fmt.Errorf("malformed")
 		}
-		if strings.Contains(integer, thousandsSeparator) {
-			if !validGroupedInteger(integer, thousandsSeparator) {
-				return "", fmt.Errorf("malformed")
-			}
-			integer = strings.ReplaceAll(integer, thousandsSeparator, "")
+		integer, err := normalizeSuggestedInteger(integer, thousandsSeparator)
+		if err != nil {
+			return "", err
 		}
 		return normalizeAmount(integer + "." + fraction)
 	case lastDot >= 0:
 		return normalizeSingleSeparatorAmount(amount, ".")
 	case lastComma >= 0:
 		return normalizeSingleSeparatorAmount(amount, ",")
+	case strings.Contains(amount, " "):
+		if !validGroupedInteger(amount, " ") {
+			return "", fmt.Errorf("malformed")
+		}
+		return normalizeAmount(strings.ReplaceAll(amount, " ", ""))
 	default:
 		return normalizeAmount(amount)
 	}
@@ -147,12 +173,42 @@ func normalizeSuggestedAmount(input string) (string, error) {
 func normalizeSingleSeparatorAmount(amount, separator string) (string, error) {
 	parts := strings.Split(amount, separator)
 	if len(parts) == 2 && validFraction(parts[1]) {
-		return normalizeAmount(parts[0] + "." + parts[1])
+		integer, err := normalizeSuggestedInteger(parts[0], "")
+		if err != nil {
+			return "", err
+		}
+		return normalizeAmount(integer + "." + parts[1])
 	}
 	if validGroupedInteger(amount, separator) {
 		return normalizeAmount(strings.ReplaceAll(amount, separator, ""))
 	}
 	return "", fmt.Errorf("malformed")
+}
+
+func normalizeSuggestedInteger(integer, punctuationThousandsSeparator string) (string, error) {
+	if strings.Contains(integer, " ") {
+		if punctuationThousandsSeparator != "" && strings.Contains(integer, punctuationThousandsSeparator) {
+			return "", fmt.Errorf("malformed")
+		}
+		if !validGroupedInteger(integer, " ") {
+			return "", fmt.Errorf("malformed")
+		}
+		integer = strings.ReplaceAll(integer, " ", "")
+	}
+	if punctuationThousandsSeparator != "" && strings.Contains(integer, punctuationThousandsSeparator) {
+		if !validGroupedInteger(integer, punctuationThousandsSeparator) {
+			return "", fmt.Errorf("malformed")
+		}
+		integer = strings.ReplaceAll(integer, punctuationThousandsSeparator, "")
+	}
+	if !asciiDigits(integer) {
+		return "", fmt.Errorf("malformed")
+	}
+	return integer, nil
+}
+
+func normalizeAmountWhitespace(input string) string {
+	return strings.Join(strings.FieldsFunc(strings.TrimSpace(input), unicode.IsSpace), " ")
 }
 
 func validFraction(value string) bool {

@@ -55,6 +55,7 @@ func TestSuggestPaymentDetailsFromTextParsesThousandsSeparatedAmounts(t *testing
 		{name: "belgian", text: "Amount: EUR 1.234,56"},
 		{name: "english", text: "Amount: EUR 1,234.56"},
 		{name: "integer", text: "Amount: EUR 1.234"},
+		{name: "space", text: "Amount: EUR 1 234,56"},
 		{name: "non-breaking space", text: "Amount: EUR 1\u00a0234,56"},
 		{name: "narrow non-breaking space", text: "Amount: EUR 1\u202f234,56"},
 	}
@@ -81,6 +82,38 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsFromTextUsesCurrencyAmountAfterDate(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total due by 2026-06-30: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "42.50" {
+		t.Fatalf("amount = %q, want 42.50", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextReportsAmbiguousDateAndAmountWithoutCurrency(t *testing.T) {
+	_, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total due by 2026-06-30: 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected ambiguity error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "amount") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
+		t.Fatalf("expected amount ambiguity error, got %v", err)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextDoesNotTruncateMalformedThousandsAmount(t *testing.T) {
 	_, err := SuggestPaymentDetailsFromText(`
 Payee: ACME BV
@@ -94,6 +127,26 @@ Reference: INV-2026-001
 	}
 	if !strings.Contains(strings.ToLower(err.Error()), "amount") {
 		t.Fatalf("expected amount error, got %v", err)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextRejectsMalformedSpaceGroupedAmounts(t *testing.T) {
+	for _, amount := range []string{"1 23,45", "12 34,56"} {
+		t.Run(amount, func(t *testing.T) {
+			_, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR `+amount+`
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err == nil {
+				t.Fatalf("expected amount error")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "amount") {
+				t.Fatalf("expected amount error, got %v", err)
+			}
+		})
 	}
 }
 

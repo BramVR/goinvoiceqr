@@ -42,6 +42,12 @@ func TestRenderQRCodeSVG(t *testing.T) {
 	if !strings.Contains(text, "<svg") || !strings.Contains(text, "</svg>") {
 		t.Fatalf("expected SVG document, got %q", text[:min(len(text), 120)])
 	}
+	if !strings.Contains(text, `viewBox="0 0 450 450"`) {
+		t.Fatalf("expected four-module quiet zone in viewBox, got %q", text[:min(len(text), 120)])
+	}
+	if !strings.Contains(text, `<path d="M40,40`) {
+		t.Fatalf("expected SVG modules to start after four-module quiet zone, got %q", text[:min(len(text), 160)])
+	}
 }
 
 func TestInferQRFormat(t *testing.T) {
@@ -98,6 +104,22 @@ func TestWriteQRArtifactRefusesOverwrite(t *testing.T) {
 	}
 	if string(got) != "existing" {
 		t.Fatalf("expected existing content to remain, got %q", got)
+	}
+}
+
+func TestWriteQRArtifactRefusesDanglingSymlinkOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.Symlink(filepath.Join(dir, "missing-target.svg"), out); err != nil {
+		t.Fatalf("seed symlink: %v", err)
+	}
+
+	err := WriteQRArtifact(sampleEPCPayload, QROutputOptions{Out: out})
+	if err == nil {
+		t.Fatalf("expected overwrite error")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "missing-target.svg")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected dangling symlink target to remain absent, got %v", statErr)
 	}
 }
 

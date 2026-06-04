@@ -23,6 +23,11 @@ type QROutputOptions struct {
 	Force  bool
 }
 
+const (
+	qrScale            = 10
+	qrQuietZoneModules = 4
+)
+
 func RenderQRCode(payload string, format QRFormat) ([]byte, error) {
 	if format != QRFormatPNG && format != QRFormatSVG {
 		return nil, fmt.Errorf("format: unsupported %q", format)
@@ -32,7 +37,7 @@ func RenderQRCode(payload string, format QRFormat) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("qr render: %w", err)
 	}
-	config := goqr.NewQrCodeImgConfig(10, 4)
+	config := qrCodeImgConfig(format)
 
 	switch format {
 	case QRFormatPNG:
@@ -41,6 +46,15 @@ func RenderQRCode(payload string, format QRFormat) ([]byte, error) {
 		return qr.ToSVGBytes(config)
 	}
 	return nil, fmt.Errorf("format: unsupported %q", format)
+}
+
+func qrCodeImgConfig(format QRFormat) *goqr.QrCodeImgConfig {
+	border := qrQuietZoneModules
+	if format == QRFormatSVG {
+		// go-qr renders SVG borders in output units, while PNG borders are modules.
+		border *= qrScale
+	}
+	return goqr.NewQrCodeImgConfig(qrScale, border)
 }
 
 func WriteQRArtifact(payload string, options QROutputOptions) error {
@@ -110,7 +124,7 @@ func writeFile(path string, data []byte) error {
 }
 
 func pathExists(path string) (bool, error) {
-	_, err := os.Stat(path)
+	_, err := os.Lstat(path)
 	if err == nil {
 		return true, nil
 	}

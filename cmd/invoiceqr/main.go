@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -90,8 +91,26 @@ type FromTextCmd struct {
 	QROutputFlags       `embed:""`
 }
 
-func (FromTextCmd) Run() error {
-	return errNotImplemented("from-text")
+func (cmd FromTextCmd) Run() error {
+	text, err := readInvoiceText(cmd.File)
+	if err != nil {
+		return err
+	}
+	suggestion, err := invoiceqr.SuggestPaymentDetailsFromText(text, cmd.paymentDetails())
+	if err != nil {
+		return err
+	}
+	confirm := confirmPaymentDetails
+	if cmd.File == "" {
+		confirm = confirmPaymentDetailsFromTerminal
+	}
+	return invoiceqr.GeneratePaymentArtifact(
+		invoiceqr.PaymentGenerationOptions{
+			Details: suggestionPaymentDetails(suggestion),
+			Output:  cmd.qrOutputOptions(),
+		},
+		confirm,
+	)
 }
 
 type FromPDFCmd struct {
@@ -128,10 +147,25 @@ func referenceTypeLabel(kind invoiceqr.RemittanceKind) string {
 }
 
 func confirmPaymentDetails(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+	return confirmPaymentDetailsWithInput(details, os.Stdin)
+}
+
+var terminalInputPath = "/dev/tty"
+
+func confirmPaymentDetailsFromTerminal(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+	terminal, err := os.Open(terminalInputPath)
+	if err != nil {
+		return false, err
+	}
+	defer terminal.Close()
+	return confirmPaymentDetailsWithInput(details, terminal)
+}
+
+func confirmPaymentDetailsWithInput(details invoiceqr.ValidatedPaymentDetails, input io.Reader) (bool, error) {
 	printPaymentDetails(details)
 	fmt.Print("Write QR artifact? [y/N]: ")
 
-	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	answer, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && answer == "" {
 		return false, err
 	}
@@ -140,6 +174,31 @@ func confirmPaymentDetails(details invoiceqr.ValidatedPaymentDetails) (bool, err
 		return true, nil
 	default:
 		return false, nil
+	}
+}
+
+func readInvoiceText(path string) (string, error) {
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+	data, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func suggestionPaymentDetails(details invoiceqr.SuggestedPaymentDetails) invoiceqr.PaymentDetails {
+	return invoiceqr.PaymentDetails{
+		Payee:     details.Payee,
+		IBAN:      details.IBAN,
+		Amount:    details.Amount,
+		Reference: details.Reference,
+		BIC:       details.BIC,
 	}
 }
 

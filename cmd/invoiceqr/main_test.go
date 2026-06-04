@@ -93,7 +93,6 @@ func TestCommandsReturnPlaceholderErrors(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{name: "from-text", args: []string{"from-text"}, message: "from-text is not implemented yet"},
 		{name: "from-pdf", args: []string{"from-pdf"}, message: "from-pdf is not implemented yet"},
 	}
 
@@ -250,6 +249,134 @@ func TestGenerateValidationFailureDoesNotPromptOrWrite(t *testing.T) {
 	}
 }
 
+func TestFromTextFilePromptsAndWritesAfterConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "invoice.txt")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(input, []byte(clearInvoiceText()), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	cmd := exec.Command("go", "run", ".", "from-text", input, "--out", out)
+	cmd.Stdin = strings.NewReader("yes\n")
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected from-text to succeed, output:\n%s", output)
+	}
+	for _, want := range []string{
+		"Payment Details",
+		"Payee: ACME BV",
+		"IBAN: BE68539007547034",
+		"Amount: EUR42.50",
+		"Reference: INV-2026-001",
+		"Write QR artifact?",
+	} {
+		if !strings.Contains(string(output), want) {
+			t.Fatalf("expected output to contain %q, got:\n%s", want, output)
+		}
+	}
+	assertSVGOutput(t, out)
+}
+
+func TestFromTextStdinUsesOverridesAndTerminalConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "invoice.svg")
+	input, err := os.CreateTemp(dir, "invoice-*.txt")
+	if err != nil {
+		t.Fatalf("create input: %v", err)
+	}
+	if _, err := input.WriteString(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Total: EUR 12.00
+Reference: INV-2026-001
+`); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	if _, err := input.Seek(0, 0); err != nil {
+		t.Fatalf("seek input: %v", err)
+	}
+	confirmationPath := filepath.Join(dir, "confirmation.txt")
+	if err := os.WriteFile(confirmationPath, []byte("yes\n"), 0o644); err != nil {
+		t.Fatalf("write confirmation: %v", err)
+	}
+
+	oldStdin := os.Stdin
+	oldTerminalInputPath := terminalInputPath
+	os.Stdin = input
+	terminalInputPath = confirmationPath
+	defer func() {
+		os.Stdin = oldStdin
+		terminalInputPath = oldTerminalInputPath
+		input.Close()
+	}()
+
+	cmd := FromTextCmd{
+		PaymentDetailsFlags: PaymentDetailsFlags{
+			Amount:    "10",
+			Reference: "MANUAL-REF",
+		},
+		QROutputFlags: QROutputFlags{Out: out},
+	}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("expected from-text stdin to succeed, got %v", err)
+	}
+	assertSVGOutput(t, out)
+}
+
+func TestFromTextMissingFieldDoesNotPromptOrWrite(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command("go", "run", ".", "from-text", "--out", out)
+	cmd.Stdin = strings.NewReader("Payee: ACME BV\nAmount: EUR 42.50\nReference: INV-1\nyes\n")
+
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected missing field failure, output:\n%s", output)
+	}
+	if !strings.Contains(strings.ToLower(string(output)), "iban") {
+		t.Fatalf("expected iban error, got:\n%s", output)
+	}
+	if strings.Contains(string(output), "Write QR artifact") {
+		t.Fatalf("expected no prompt before complete suggestion, got:\n%s", output)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromTextAmbiguousAmountDoesNotWrite(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command("go", "run", ".", "from-text", "--out", out)
+	cmd.Stdin = strings.NewReader(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Total: EUR 12.00
+Reference: INV-1
+yes
+`)
+
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected ambiguity failure, output:\n%s", output)
+	}
+	if !strings.Contains(strings.ToLower(string(output)), "amount") || !strings.Contains(strings.ToLower(string(output)), "ambiguous") {
+		t.Fatalf("expected amount ambiguity error, got:\n%s", output)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromTextRejectsYesFlag(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "from-text", "--yes")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected --yes to fail for from-text, output:\n%s", output)
+	}
+}
+
 func assertSVGOutput(t *testing.T, path string) {
 	t.Helper()
 
@@ -260,4 +387,12 @@ func assertSVGOutput(t *testing.T, path string) {
 	if !strings.Contains(string(data), "<svg") {
 		t.Fatalf("expected SVG output, got %q", data[:min(len(data), 120)])
 	}
+}
+
+func clearInvoiceText() string {
+	return `Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`
 }

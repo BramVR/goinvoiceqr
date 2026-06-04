@@ -10,7 +10,7 @@ func TestValidatePaymentDetailsNormalizesFields(t *testing.T) {
 		Payee:     "  ACME BV  ",
 		IBAN:      " be68 5390 0754 7034 ",
 		Amount:    "42.5",
-		Reference: "+++/123/4567/89002+++",
+		Reference: "+++123/4567/89002+++",
 	})
 
 	if err != nil {
@@ -28,8 +28,24 @@ func TestValidatePaymentDetailsNormalizesFields(t *testing.T) {
 	if details.Reference.Kind != StructuredReference {
 		t.Fatalf("reference kind = %v", details.Reference.Kind)
 	}
-	if details.Reference.Value != "+++/123/4567/89002+++" {
+	if details.Reference.Value != "+++123/4567/89002+++" {
 		t.Fatalf("reference value = %q", details.Reference.Value)
+	}
+}
+
+func TestValidatePaymentDetailsAcceptsDocumentedStructuredReferenceSyntax(t *testing.T) {
+	details, err := ValidatePaymentDetails(PaymentDetails{
+		Payee:     "ACME BV",
+		IBAN:      "BE68539007547034",
+		Amount:    "42.50",
+		Reference: "+++/123/4567/89002+++",
+	})
+
+	if err != nil {
+		t.Fatalf("expected documented structured reference syntax to pass, got %v", err)
+	}
+	if details.Reference.Kind != StructuredReference {
+		t.Fatalf("reference kind = %v", details.Reference.Kind)
 	}
 }
 

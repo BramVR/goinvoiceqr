@@ -37,7 +37,7 @@ type ConfirmedPaymentDetails struct {
 	BIC       string
 }
 
-var structuredReferencePattern = regexp.MustCompile(`^\+\+\+/(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
+var structuredReferencePattern = regexp.MustCompile(`^\+\+\+/?(\d{3})/(\d{4})/(\d{5})\+\+\+$`)
 
 func ValidatePaymentDetails(details PaymentDetails) (ConfirmedPaymentDetails, error) {
 	payee := strings.TrimSpace(details.Payee)

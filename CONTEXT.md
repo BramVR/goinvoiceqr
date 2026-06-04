@@ -25,7 +25,7 @@ The payment communication carried with the transfer, either a Belgian structured
 _Avoid_: Message, note, description
 
 **Belgian Structured Reference**:
-A checksum-protected Belgian creditor reference written in the `+++/123/1234/12345+++` style.
+A checksum-protected Belgian creditor reference written in the standard `+++123/1234/12345+++` style. `invoiceqr` also accepts the slash-after-plus variant `+++/123/1234/12345+++`.
 _Avoid_: OGM, structured communication
 
 **Unstructured Remittance Information**:
@@ -37,7 +37,7 @@ _Avoid_: Plain reference, fallback message
 Dev: "The PDF extractor found suggested payment details."
 Domain expert: "Show them to the user first. Only confirmed payment details may produce a QR code."
 
-Dev: "The invoice has `+++/123/1234/12345+++`."
+Dev: "The invoice has `+++123/1234/12345+++`."
 Domain expert: "That is a Belgian structured reference, so validate its checksum before confirmation."
 
 Dev: "The user entered a normal invoice number as the remittance reference."
@@ -46,5 +46,5 @@ Domain expert: "Treat it as unstructured remittance information. Do not also set
 Dev: "`generate --yes` skips the prompt after validating manual payment details."
 Domain expert: "That is fine for manual payment details. Suggested payment details still need explicit confirmation."
 
-Dev: "The reference looks like `+++/123/1234/12345+++` but the checksum is wrong."
+Dev: "The reference looks like `+++123/1234/12345+++` but the checksum is wrong."
 Domain expert: "Reject it. Do not silently downgrade a malformed Belgian structured reference to unstructured remittance information."

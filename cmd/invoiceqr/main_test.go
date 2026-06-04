@@ -92,7 +92,6 @@ func TestCommandsReturnPlaceholderErrors(t *testing.T) {
 		message string
 	}{
 		{name: "generate", args: []string{"generate"}, message: "generate is not implemented yet"},
-		{name: "validate", args: []string{"validate"}, message: "validate is not implemented yet"},
 		{name: "from-text", args: []string{"from-text"}, message: "from-text is not implemented yet"},
 		{name: "from-pdf", args: []string{"from-pdf"}, message: "from-pdf is not implemented yet"},
 	}
@@ -109,5 +108,49 @@ func TestCommandsReturnPlaceholderErrors(t *testing.T) {
 				t.Fatalf("expected output to contain %q, got:\n%s", tt.message, output)
 			}
 		})
+	}
+}
+
+func TestValidatePrintsNormalizedPaymentDetails(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "validate",
+		"--payee", " ACME BV ",
+		"--iban", "be68 5390 0754 7034",
+		"--amount", "42.5",
+		"--reference", "INV-2026-001",
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected validate to succeed, output:\n%s", output)
+	}
+
+	for _, want := range []string{
+		"Payment Details",
+		"Payee: ACME BV",
+		"IBAN: BE68539007547034",
+		"Amount: EUR42.50",
+		"Reference: INV-2026-001",
+		"Reference Type: Unstructured Remittance Information",
+	} {
+		if !strings.Contains(string(output), want) {
+			t.Fatalf("expected output to contain %q, got:\n%s", want, output)
+		}
+	}
+}
+
+func TestValidatePrintsFieldSpecificErrors(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "validate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547035",
+		"--amount", "42.50",
+		"--reference", "INV-2026-001",
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected validate to fail, output:\n%s", output)
+	}
+	if !strings.Contains(strings.ToLower(string(output)), "iban") {
+		t.Fatalf("expected field-specific iban error, got:\n%s", output)
 	}
 }

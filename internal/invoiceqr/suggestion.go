@@ -45,7 +45,7 @@ var (
 	payeeLinePattern     = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
 	referenceLinePattern = regexp.MustCompile(`(?im)^\s*(?:reference|communication|remittance|mededeling|invoice)\s*:\s*(.+?)\s*$`)
 	ibanCandidatePattern = regexp.MustCompile(`(?i)\b[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
-	amountLinePattern    = regexp.MustCompile(`(?im)\b(?:amount|total|bedrag|totaal|montant)\b[^\n0-9-]*([0-9](?:[0-9., \t]*[0-9])?)`)
+	amountLinePattern    = regexp.MustCompile(`(?im)\b(?:amount|total|bedrag|totaal|montant)\b[^\n0-9-]*([0-9](?:[0-9.,\p{Zs}\t]*[0-9])?)`)
 	structuredRefPattern = regexp.MustCompile(`\+\+\+/?\d{3}/\d{4}/\d{5}\+\+\+`)
 )
 

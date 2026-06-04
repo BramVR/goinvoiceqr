@@ -24,7 +24,7 @@ Read when changing `from-text`, `from-pdf`, suggestion parsing, amount parsing, 
 
 ## Amounts
 
-Suggested amounts are parsed as complete numeric tokens. Plain decimals such as `42.50` and `42,50` are accepted, and common thousands formats such as `1.234,56` and `1,234.56` normalize to `1234.56`.
+Suggested amounts are parsed as complete numeric tokens. Plain decimals such as `42.50` and `42,50` are accepted, and common thousands formats such as `1.234,56`, `1,234.56`, and `1 234,56` normalize to `1234.56`. Regular, non-breaking, and narrow non-breaking spaces are accepted as grouping whitespace.
 
 Malformed grouped values are ignored as amount candidates rather than truncated. This prevents an invoice amount such as `1.234,567` from becoming `1.23`.
 

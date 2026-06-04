@@ -55,6 +55,8 @@ func TestSuggestPaymentDetailsFromTextParsesThousandsSeparatedAmounts(t *testing
 		{name: "belgian", text: "Amount: EUR 1.234,56"},
 		{name: "english", text: "Amount: EUR 1,234.56"},
 		{name: "integer", text: "Amount: EUR 1.234"},
+		{name: "non-breaking space", text: "Amount: EUR 1\u00a0234,56"},
+		{name: "narrow non-breaking space", text: "Amount: EUR 1\u202f234,56"},
 	}
 
 	for _, tt := range tests {

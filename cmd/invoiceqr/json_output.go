@@ -123,6 +123,17 @@ func knownErrorField(field string) bool {
 	}
 }
 
+func printJSONSuccess(data any) error {
+	return printJSONEnvelope(data, nil)
+}
+
+func printJSONError(code string, err error) error {
+	if printErr := printJSONEnvelope(nil, newCLIErrorJSON(code, err)); printErr != nil {
+		return printErr
+	}
+	return cliExitError{code: 1}
+}
+
 func printJSONEnvelope(data any, errData any) error {
 	envelope := jsonEnvelope{
 		Success: errData == nil,

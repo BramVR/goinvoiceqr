@@ -74,12 +74,9 @@ func (cmd GenerateCmd) Run() error {
 			Output:  cmd.qrOutputOptions(),
 		})
 		if err != nil {
-			if printErr := printJSONEnvelope(nil, newCLIErrorJSON("generation_error", err)); printErr != nil {
-				return printErr
-			}
-			return cliExitError{code: 1}
+			return printJSONError("generation_error", err)
 		}
-		return printJSONEnvelope(generateDryRunJSONData(plan), nil)
+		return printJSONSuccess(generateDryRunJSONData(plan))
 	}
 	if cmd.JSON {
 		return errors.New("json: requires --dry-run")
@@ -103,15 +100,12 @@ func (cmd ValidateCmd) Run() error {
 	details, err := invoiceqr.ValidatePaymentDetails(cmd.paymentDetails())
 	if err != nil {
 		if cmd.JSON {
-			if printErr := printJSONEnvelope(nil, newCLIErrorJSON("validation_error", err)); printErr != nil {
-				return printErr
-			}
-			return cliExitError{code: 1}
+			return printJSONError("validation_error", err)
 		}
 		return err
 	}
 	if cmd.JSON {
-		return printJSONEnvelope(validateJSONData(details), nil)
+		return printJSONSuccess(validateJSONData(details))
 	}
 	printPaymentDetails(details)
 	return nil

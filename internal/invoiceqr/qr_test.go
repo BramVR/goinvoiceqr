@@ -157,6 +157,35 @@ func TestPreflightQROutputRefusesOverwriteBeforeRendering(t *testing.T) {
 	}
 }
 
+func TestPreflightQROutputRefusesMissingParentDirectory(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "missing", "invoice.svg")
+
+	_, err := PreflightQROutput(QROutputOptions{Out: out})
+
+	if err == nil {
+		t.Fatalf("expected missing parent directory error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "parent directory") {
+		t.Fatalf("expected parent directory error, got %v", err)
+	}
+}
+
+func TestPreflightQROutputRefusesForceDirectory(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	if err := os.Mkdir(out, 0o755); err != nil {
+		t.Fatalf("seed output directory: %v", err)
+	}
+
+	_, err := PreflightQROutput(QROutputOptions{Out: out, Force: true})
+
+	if err == nil {
+		t.Fatalf("expected directory output error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "directory") {
+		t.Fatalf("expected directory error, got %v", err)
+	}
+}
+
 func TestPreflightQROutputRefusesForceSymlink(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target.svg")

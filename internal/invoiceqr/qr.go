@@ -33,6 +33,12 @@ type QROutputPreflight struct {
 	WillOverwrite bool
 }
 
+type QRArtifactWriteResult struct {
+	Path      string
+	Format    QRFormat
+	ByteCount int
+}
+
 const (
 	qrScale            = 10
 	qrQuietZoneModules = 4
@@ -80,6 +86,11 @@ func WriteQRArtifact(payload string, options QROutputOptions) error {
 }
 
 func WritePlannedQRArtifact(payload string, output QROutputPreflight) error {
+	_, err := writePlannedQRArtifact(payload, output, RenderQRCode, writeFile)
+	return err
+}
+
+func WritePlannedQRArtifactWithResult(payload string, output QROutputPreflight) (QRArtifactWriteResult, error) {
 	return writePlannedQRArtifact(payload, output, RenderQRCode, writeFile)
 }
 
@@ -154,18 +165,23 @@ func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFun
 	if err != nil {
 		return err
 	}
-	return writePlannedQRArtifact(payload, preflight, render, write)
+	_, err = writePlannedQRArtifact(payload, preflight, render, write)
+	return err
 }
 
-func writePlannedQRArtifact(payload string, output QROutputPreflight, render qrRenderFunc, write qrWriteFunc) error {
+func writePlannedQRArtifact(payload string, output QROutputPreflight, render qrRenderFunc, write qrWriteFunc) (QRArtifactWriteResult, error) {
 	data, err := render(payload, output.Format)
 	if err != nil {
-		return err
+		return QRArtifactWriteResult{}, err
 	}
 	if err := write(output.Path, data, output.Force); err != nil {
-		return fmt.Errorf("out: %w", err)
+		return QRArtifactWriteResult{}, fmt.Errorf("out: %w", err)
 	}
-	return nil
+	return QRArtifactWriteResult{
+		Path:      output.Path,
+		Format:    output.Format,
+		ByteCount: len(data),
+	}, nil
 }
 
 func inferQRFormat(out, override string) (QRFormat, error) {

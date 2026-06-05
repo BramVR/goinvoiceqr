@@ -55,6 +55,7 @@ Generate a QR artifact from manual payment details:
 ```sh
 go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001 --out invoice.svg
 go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001 --out invoice.png
+go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001 --out invoice.svg --yes --json
 go run ./cmd/invoiceqr generate --payee "ACME BV" --iban BE68539007547034 --amount 42.50 --reference INV-2026-001 --out invoice.svg --dry-run --json
 ```
 
@@ -80,6 +81,8 @@ go run ./cmd/invoiceqr from-text invoice.txt --amount 42.50 --reference INV-2026
 `validate` prints normalized payment details and field-specific validation errors. `generate` validates manual payment details, asks for confirmation unless `--yes` is supplied, and writes a QR artifact. `from-text` and `from-pdf` suggest payment details and always require confirmation before output.
 
 Pass `--json` to `validate` to print a machine-readable envelope with `success`, `data`, and `error` fields.
+
+Pass `--json` to `generate` to print a machine-readable artifact result after the QR file is written. When confirmation is required, payment details and the prompt are written to stderr so stdout remains parseable JSON.
 
 Pass `--dry-run --json` to `generate` to validate manual payment details, build the EPC payload, and preflight QR output without prompting or writing a file.
 

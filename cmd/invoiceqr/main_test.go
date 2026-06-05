@@ -380,7 +380,7 @@ func TestGenerateDryRunJSONValidationFailurePrintsErrorEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected dry-run validation failure")
 	}
-	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "iban", "invalid checksum")
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "iban", "invalid checksum")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -415,7 +415,7 @@ func TestGenerateDryRunJSONExistingOutputPrintsErrorEnvelopeAndDoesNotWrite(t *t
 	if err == nil {
 		t.Fatalf("expected dry-run existing output failure")
 	}
-	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "out", "already exists")
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "out", "already exists")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -448,7 +448,7 @@ func TestGenerateDryRunJSONUnknownExtensionPrintsErrorEnvelopeAndDoesNotWrite(t 
 	if err == nil {
 		t.Fatalf("expected dry-run unknown extension failure")
 	}
-	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "format", "required")
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "format", "required")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -477,7 +477,7 @@ func TestGenerateDryRunJSONMissingParentPrintsErrorEnvelopeAndDoesNotWrite(t *te
 	if err == nil {
 		t.Fatalf("expected dry-run missing parent failure")
 	}
-	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "out", "parent directory")
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "out", "parent directory")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -510,7 +510,7 @@ func TestGenerateDryRunJSONDirectoryOutputPrintsErrorEnvelope(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected dry-run directory output failure")
 	}
-	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "out", "directory")
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "out", "directory")
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -520,6 +520,213 @@ func TestGenerateDryRunJSONDirectoryOutputPrintsErrorEnvelope(t *testing.T) {
 	}
 	if !info.IsDir() {
 		t.Fatalf("expected dry-run to leave output directory unchanged")
+	}
+}
+
+func TestGenerateYesJSONWritesArtifactAndPrintsResultEnvelope(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command("go", "run", ".", "generate",
+		"--payee", " ACME BV ",
+		"--iban", "be68 5390 0754 7034",
+		"--amount", "42.5",
+		"--reference", "INV-1",
+		"--out", out,
+		"--yes",
+		"--json",
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("expected generate JSON to succeed, output:\n%s", output)
+	}
+	if strings.Contains(string(output), "Write QR artifact") || strings.Contains(string(output), "Payment Details") {
+		t.Fatalf("expected JSON-only stdout, got:\n%s", output)
+	}
+	assertSVGOutput(t, out)
+
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			PaymentDetails paymentDetailsJSON `json:"payment_details"`
+			EPC            struct {
+				ServiceTag     string `json:"service_tag"`
+				Version        string `json:"version"`
+				CharacterSet   string `json:"character_set"`
+				Identification string `json:"identification"`
+				Currency       string `json:"currency"`
+			} `json:"epc"`
+			Output struct {
+				Path      string `json:"path"`
+				Format    string `json:"format"`
+				ByteCount int    `json:"byte_count"`
+			} `json:"output"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if !envelope.Success || envelope.Error != nil {
+		t.Fatalf("expected success envelope, got:\n%s", output)
+	}
+	if envelope.Data.PaymentDetails.Payee != "ACME BV" || envelope.Data.PaymentDetails.IBAN != "BE68539007547034" {
+		t.Fatalf("expected normalized payment details, got %+v", envelope.Data.PaymentDetails)
+	}
+	if envelope.Data.PaymentDetails.Reference.Kind != "unstructured" {
+		t.Fatalf("expected reference kind, got %+v", envelope.Data.PaymentDetails.Reference)
+	}
+	if envelope.Data.EPC.ServiceTag != "BCD" || envelope.Data.EPC.Version != "002" || envelope.Data.EPC.Identification != "SCT" {
+		t.Fatalf("expected EPC metadata, got %+v", envelope.Data.EPC)
+	}
+	if envelope.Data.Output.Path != out || envelope.Data.Output.Format != "svg" {
+		t.Fatalf("expected artifact output metadata, got %+v", envelope.Data.Output)
+	}
+	if envelope.Data.Output.ByteCount <= 0 {
+		t.Fatalf("expected byte count, got %+v", envelope.Data.Output)
+	}
+}
+
+func TestGenerateJSONPromptsOnStderrAndPrintsResultEnvelope(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command("go", "run", ".", "generate",
+		"--payee", " ACME BV ",
+		"--iban", "be68 5390 0754 7034",
+		"--amount", "42.5",
+		"--reference", "INV-1",
+		"--out", out,
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader("yes\n")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("expected generate JSON to succeed, stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "Write QR artifact") || strings.Contains(stdout.String(), "Payment Details") {
+		t.Fatalf("expected JSON-only stdout, got:\n%s", stdout.String())
+	}
+	for _, want := range []string{"Payment Details", "Payee: ACME BV", "Write QR artifact?"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr.String())
+		}
+	}
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Output struct {
+				Path      string `json:"path"`
+				Format    string `json:"format"`
+				ByteCount int    `json:"byte_count"`
+			} `json:"output"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\n%s", err, stdout.String())
+	}
+	if !envelope.Success || envelope.Error != nil {
+		t.Fatalf("expected success envelope, got:\n%s", stdout.String())
+	}
+	if envelope.Data.Output.Path != out || envelope.Data.Output.Format != "svg" || envelope.Data.Output.ByteCount <= 0 {
+		t.Fatalf("expected artifact output metadata, got %+v", envelope.Data.Output)
+	}
+	assertSVGOutput(t, out)
+}
+
+func TestGenerateJSONRefusalPrintsErrorEnvelopeAndDoesNotWrite(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "generate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547034",
+		"--amount", "42.50",
+		"--reference", "INV-1",
+		"--out", out,
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader("no\n")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected confirmation refusal")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "confirmation", "refused")
+	if !strings.Contains(stderr.String(), "Write QR artifact?") {
+		t.Fatalf("expected confirmation prompt on stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestGenerateJSONValidationFailureDoesNotPromptOrWrite(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "generate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547035",
+		"--amount", "42.50",
+		"--reference", "INV-1",
+		"--out", out,
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader("yes\n")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected validation failure")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "iban", "invalid checksum")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no confirmation stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestGenerateJSONPreflightFailureDoesNotPromptOrWrite(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	if err := os.WriteFile(out, []byte("seed"), 0o644); err != nil {
+		t.Fatalf("seed output: %v", err)
+	}
+	cmd := exec.Command(binary, "generate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547034",
+		"--amount", "42.50",
+		"--reference", "INV-1",
+		"--out", out,
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader("yes\n")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected output preflight failure")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "generation_error", "out", "already exists")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected no confirmation stderr, got:\n%s", stderr.String())
+	}
+	got, readErr := os.ReadFile(out)
+	if readErr != nil {
+		t.Fatalf("read output: %v", readErr)
+	}
+	if string(got) != "seed" {
+		t.Fatalf("expected preflight failure to leave output unchanged, got %q", got)
 	}
 }
 
@@ -981,7 +1188,7 @@ func setStdin(t *testing.T, input string) {
 	})
 }
 
-func assertGenerateDryRunJSONError(t *testing.T, output []byte, code string, field string, message string) {
+func assertGenerateJSONError(t *testing.T, output []byte, code string, field string, message string) {
 	t.Helper()
 
 	var envelope struct {

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payment|betaal|betalen|betaling)\b`)
+var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
 
 type AgentContext struct {
 	SourceTextHash string

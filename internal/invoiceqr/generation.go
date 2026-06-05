@@ -23,15 +23,6 @@ type PaymentArtifactPlan struct {
 	Output        QROutputPreflight
 }
 
-type EPCPayloadData struct {
-	ServiceTag     string
-	Version        string
-	CharacterSet   string
-	Identification string
-	Currency       string
-	Payload        string
-}
-
 type PaymentConfirmationFunc func(ValidatedPaymentDetails) (bool, error)
 type QRArtifactWriteFunc func(string, QROutputPreflight) error
 
@@ -51,7 +42,7 @@ func buildPaymentArtifactPlan(options PaymentArtifactPlanOptions, preflight qrOu
 		return PaymentArtifactPlan{}, err
 	}
 
-	payload, err := BuildEPCPayload(confirmedPaymentDetails(validated))
+	epc, err := BuildEPCPayloadData(confirmedPaymentDetails(validated))
 	if err != nil {
 		return PaymentArtifactPlan{}, err
 	}
@@ -64,15 +55,8 @@ func buildPaymentArtifactPlan(options PaymentArtifactPlanOptions, preflight qrOu
 	return PaymentArtifactPlan{
 		Details:       validated,
 		ReferenceKind: validated.Reference.Kind,
-		EPC: EPCPayloadData{
-			ServiceTag:     "BCD",
-			Version:        "002",
-			CharacterSet:   "1",
-			Identification: "SCT",
-			Currency:       "EUR",
-			Payload:        payload,
-		},
-		Output: output,
+		EPC:           epc,
+		Output:        output,
 	}, nil
 }
 

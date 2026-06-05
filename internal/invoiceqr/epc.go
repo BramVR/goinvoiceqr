@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+const (
+	epcServiceTag     = "BCD"
+	epcVersion        = "002"
+	epcCharacterSet   = "1"
+	epcIdentification = "SCT"
+	epcCurrency       = "EUR"
+)
+
 type ConfirmedPaymentDetails struct {
 	Payee     string
 	IBAN      string
@@ -13,7 +21,24 @@ type ConfirmedPaymentDetails struct {
 	BIC       string
 }
 
+type EPCPayloadData struct {
+	ServiceTag     string
+	Version        string
+	CharacterSet   string
+	Identification string
+	Currency       string
+	Payload        string
+}
+
 func BuildEPCPayload(details ConfirmedPaymentDetails) (string, error) {
+	data, err := BuildEPCPayloadData(details)
+	if err != nil {
+		return "", err
+	}
+	return data.Payload, nil
+}
+
+func BuildEPCPayloadData(details ConfirmedPaymentDetails) (EPCPayloadData, error) {
 	structuredReference := ""
 	unstructuredReference := ""
 	switch details.Reference.Kind {
@@ -22,21 +47,30 @@ func BuildEPCPayload(details ConfirmedPaymentDetails) (string, error) {
 	case UnstructuredReference:
 		unstructuredReference = details.Reference.Value
 	default:
-		return "", errors.New("reference: unknown remittance kind")
+		return EPCPayloadData{}, errors.New("reference: unknown remittance kind")
 	}
 
-	return strings.Join([]string{
-		"BCD",
-		"002",
-		"1",
-		"SCT",
+	payload := strings.Join([]string{
+		epcServiceTag,
+		epcVersion,
+		epcCharacterSet,
+		epcIdentification,
 		details.BIC,
 		details.Payee,
 		details.IBAN,
-		"EUR" + details.Amount,
+		epcCurrency + details.Amount,
 		"",
 		structuredReference,
 		unstructuredReference,
 		"",
-	}, "\n"), nil
+	}, "\n")
+
+	return EPCPayloadData{
+		ServiceTag:     epcServiceTag,
+		Version:        epcVersion,
+		CharacterSet:   epcCharacterSet,
+		Identification: epcIdentification,
+		Currency:       epcCurrency,
+		Payload:        payload,
+	}, nil
 }

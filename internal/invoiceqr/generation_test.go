@@ -133,6 +133,68 @@ func TestGeneratePaymentArtifactPreflightsOutputBeforeConfirmation(t *testing.T)
 	}
 }
 
+func TestGeneratePaymentArtifactPreflightsExistingOutputBeforeConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(out, []byte("existing"), 0o644); err != nil {
+		t.Fatalf("seed output: %v", err)
+	}
+	confirmCalled := false
+
+	err := GeneratePaymentArtifact(
+		PaymentGenerationOptions{
+			Details: validManualPaymentDetails(),
+			Output:  QROutputOptions{Out: out},
+		},
+		func(ValidatedPaymentDetails) (bool, error) {
+			confirmCalled = true
+			return true, nil
+		},
+	)
+
+	if err == nil {
+		t.Fatalf("expected existing output error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+		t.Fatalf("expected existing output error, got %v", err)
+	}
+	if confirmCalled {
+		t.Fatalf("expected output preflight before confirmation")
+	}
+}
+
+func TestGeneratePaymentArtifactPreflightsForceSymlinkBeforeConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.svg")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(target, []byte("target"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	symlinkOrSkip(t, target, out)
+	confirmCalled := false
+
+	err := GeneratePaymentArtifact(
+		PaymentGenerationOptions{
+			Details: validManualPaymentDetails(),
+			Output:  QROutputOptions{Out: out, Force: true},
+		},
+		func(ValidatedPaymentDetails) (bool, error) {
+			confirmCalled = true
+			return true, nil
+		},
+	)
+
+	if err == nil {
+		t.Fatalf("expected symlink output error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "symlink") {
+		t.Fatalf("expected symlink error, got %v", err)
+	}
+	if confirmCalled {
+		t.Fatalf("expected output preflight before confirmation")
+	}
+}
+
 func TestGeneratePaymentArtifactYesSkipsConfirmationAndWrites(t *testing.T) {
 	var gotPayload string
 	var gotOutput QROutputPreflight

@@ -24,6 +24,14 @@ type QROutputOptions struct {
 	Force  bool
 }
 
+type QROutputPreflight struct {
+	Path          string
+	Format        QRFormat
+	Force         bool
+	Exists        bool
+	WillOverwrite bool
+}
+
 const (
 	qrScale            = 10
 	qrQuietZoneModules = 4
@@ -70,33 +78,59 @@ func WriteQRArtifact(payload string, options QROutputOptions) error {
 	return writeQRArtifact(payload, options, RenderQRCode, writeFile, pathExists)
 }
 
+func WritePlannedQRArtifact(payload string, output QROutputPreflight) error {
+	return writePlannedQRArtifact(payload, output, RenderQRCode, writeFile)
+}
+
+func PreflightQROutput(options QROutputOptions) (QROutputPreflight, error) {
+	return preflightQROutput(options, pathExists)
+}
+
 type qrRenderFunc func(string, QRFormat) ([]byte, error)
 type qrWriteFunc func(string, []byte, bool) error
 type qrExistsFunc func(string) (bool, error)
 
-func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFunc, write qrWriteFunc, exists qrExistsFunc) error {
+func preflightQROutput(options QROutputOptions, exists qrExistsFunc) (QROutputPreflight, error) {
 	out := strings.TrimSpace(options.Out)
 	if out == "" {
-		return errors.New("out: required")
+		return QROutputPreflight{}, errors.New("out: required")
 	}
 	format, err := inferQRFormat(out, options.Format)
 	if err != nil {
-		return err
+		return QROutputPreflight{}, err
 	}
 
 	found, err := exists(out)
 	if err != nil {
-		return fmt.Errorf("out: %w", err)
+		return QROutputPreflight{}, fmt.Errorf("out: %w", err)
 	}
 	if found && !options.Force {
-		return errors.New("out: already exists; use --force to overwrite")
+		return QROutputPreflight{}, errors.New("out: already exists; use --force to overwrite")
 	}
 
-	data, err := render(payload, format)
+	return QROutputPreflight{
+		Path:          out,
+		Format:        format,
+		Force:         options.Force,
+		Exists:        found,
+		WillOverwrite: found && options.Force,
+	}, nil
+}
+
+func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFunc, write qrWriteFunc, exists qrExistsFunc) error {
+	preflight, err := preflightQROutput(options, exists)
 	if err != nil {
 		return err
 	}
-	if err := write(out, data, options.Force); err != nil {
+	return writePlannedQRArtifact(payload, preflight, render, write)
+}
+
+func writePlannedQRArtifact(payload string, output QROutputPreflight, render qrRenderFunc, write qrWriteFunc) error {
+	data, err := render(payload, output.Format)
+	if err != nil {
+		return err
+	}
+	if err := write(output.Path, data, output.Force); err != nil {
 		return fmt.Errorf("out: %w", err)
 	}
 	return nil

@@ -109,6 +109,54 @@ func TestInferQRFormatRejectsUnknownExtensionWithoutOverride(t *testing.T) {
 	}
 }
 
+func TestPreflightQROutputTrimsInfersAndReportsOverwrite(t *testing.T) {
+	preflight, err := preflightQROutput(
+		QROutputOptions{Out: " invoice.svg ", Force: true},
+		func(path string) (bool, error) {
+			if path != "invoice.svg" {
+				t.Fatalf("expected trimmed path, got %q", path)
+			}
+			return true, nil
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("expected preflight, got %v", err)
+	}
+	if preflight.Path != "invoice.svg" || preflight.Format != QRFormatSVG || !preflight.Force || !preflight.Exists || !preflight.WillOverwrite {
+		t.Fatalf("unexpected preflight: %+v", preflight)
+	}
+}
+
+func TestPreflightQROutputRefusesOverwriteBeforeRendering(t *testing.T) {
+	renderCalled := false
+	writeCalled := false
+
+	err := writeQRArtifact(
+		sampleEPCPayload,
+		QROutputOptions{Out: "invoice.svg"},
+		func(string, QRFormat) ([]byte, error) {
+			renderCalled = true
+			return []byte("<svg></svg>"), nil
+		},
+		func(string, []byte, bool) error {
+			writeCalled = true
+			return nil
+		},
+		func(string) (bool, error) { return true, nil },
+	)
+
+	if err == nil {
+		t.Fatalf("expected overwrite error")
+	}
+	if renderCalled {
+		t.Fatalf("expected no render after preflight failure")
+	}
+	if writeCalled {
+		t.Fatalf("expected no write after preflight failure")
+	}
+}
+
 func TestWriteQRArtifactRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")

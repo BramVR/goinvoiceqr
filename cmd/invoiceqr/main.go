@@ -226,7 +226,7 @@ func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, 
 	if err != nil {
 		var incomplete invoiceqr.IncompleteSuggestionError
 		if errors.As(err, &incomplete) {
-			if printErr := printJSONEnvelope(suggestionDryRunJSONData(result, err), newCLIErrorJSON("incomplete_suggestion", err)); printErr != nil {
+			if printErr := printJSONEnvelope(suggestionDryRunJSONData(result, err), newIncompleteSuggestionErrorJSON(incomplete)); printErr != nil {
 				return printErr
 			}
 			return cliExitError{code: 1}

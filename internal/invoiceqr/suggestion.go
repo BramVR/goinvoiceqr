@@ -53,10 +53,18 @@ type IncompleteSuggestionError struct {
 }
 
 func (err IncompleteSuggestionError) Error() string {
-	if len(err.Issues) == 0 {
+	issue, ok := err.PrimaryIssue()
+	if !ok {
 		return "suggestion: incomplete"
 	}
-	return fmt.Sprintf("%s: %s", err.Issues[0].Field, err.Issues[0].Reason)
+	return fmt.Sprintf("%s: %s", issue.Field, issue.Reason)
+}
+
+func (err IncompleteSuggestionError) PrimaryIssue() (SuggestionFieldIssue, bool) {
+	if len(err.Issues) == 0 {
+		return SuggestionFieldIssue{}, false
+	}
+	return err.Issues[0], true
 }
 
 func (err IncompleteSuggestionError) MissingFields() []string {

@@ -273,6 +273,21 @@ func newCLIErrorJSON(code string, err error) cliErrorJSON {
 	}
 }
 
+func newIncompleteSuggestionErrorJSON(err invoiceqr.IncompleteSuggestionError) cliErrorJSON {
+	issue, ok := err.PrimaryIssue()
+	if !ok {
+		return cliErrorJSON{
+			Code:    "incomplete_suggestion",
+			Message: err.Error(),
+		}
+	}
+	return cliErrorJSON{
+		Code:    "incomplete_suggestion",
+		Field:   issue.Field,
+		Message: issue.Reason,
+	}
+}
+
 func knownErrorField(field string) bool {
 	switch field {
 	case "payee", "iban", "amount", "reference", "bic", "out", "format", "confirmation":

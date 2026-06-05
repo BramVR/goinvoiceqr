@@ -146,6 +146,110 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsFromTextPreservesHyphenatedPayeeFromCreditorIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Smith-Jones BV - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Smith-Jones BV" {
+		t.Fatalf("payee = %q, want Smith-Jones BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextSkipsFooterPrefixBeforeCreditorIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payment details - ACME BV - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "ACME BV" {
+		t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextHandlesCollapsedDashAfterCreditorIBANLine(t *testing.T) {
+	for _, line := range []string{
+		"ACME BV- Main street 1 - IBAN BE68 5390 0754 7034",
+		"ACME BV–IBAN BE68 5390 0754 7034",
+	} {
+		t.Run(line, func(t *testing.T) {
+			suggestion, err := SuggestPaymentDetailsFromText(`
+`+line+`
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err != nil {
+				t.Fatalf("expected suggestion, got %v", err)
+			}
+			if suggestion.Payee != "ACME BV" {
+				t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+			}
+		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsPayeeContainingIBANTextInCreditorIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Ibanity BV - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Ibanity BV" {
+		t.Fatalf("payee = %q, want Ibanity BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsPayeeContainingStandaloneIBANWordInCreditorIBANLine(t *testing.T) {
+	for _, line := range []string{
+		"IBAN Services BV - Main street 1 - IBAN BE68 5390 0754 7034",
+		"Payee: IBAN Services BV - Main street 1 - IBAN BE68 5390 0754 7034",
+	} {
+		t.Run(line, func(t *testing.T) {
+			suggestion, err := SuggestPaymentDetailsFromText(`
+`+line+`
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err != nil {
+				t.Fatalf("expected suggestion, got %v", err)
+			}
+			if suggestion.Payee != "IBAN Services BV" {
+				t.Fatalf("payee = %q, want IBAN Services BV", suggestion.Payee)
+			}
+		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsPayeeBeforeUndashedAddressInCreditorIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+ACME BV Main street 1 IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "ACME BV" {
+		t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextStripsCreditorLabelFromIBANLine(t *testing.T) {
 	suggestion, err := SuggestPaymentDetailsFromText(`
 Creditor: ACME BV - Main street 1 - IBAN BE68 5390 0754 7034

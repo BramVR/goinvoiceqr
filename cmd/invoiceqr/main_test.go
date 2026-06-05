@@ -486,6 +486,43 @@ func TestGenerateDryRunJSONMissingParentPrintsErrorEnvelopeAndDoesNotWrite(t *te
 	}
 }
 
+func TestGenerateDryRunJSONDirectoryOutputPrintsErrorEnvelope(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	if err := os.Mkdir(out, 0o755); err != nil {
+		t.Fatalf("seed output directory: %v", err)
+	}
+	cmd := exec.Command(binary, "generate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547034",
+		"--amount", "42.50",
+		"--reference", "INV-1",
+		"--out", out,
+		"--force",
+		"--dry-run",
+		"--json",
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected dry-run directory output failure")
+	}
+	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "out", "directory")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	info, statErr := os.Stat(out)
+	if statErr != nil {
+		t.Fatalf("stat output directory: %v", statErr)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected dry-run to leave output directory unchanged")
+	}
+}
+
 func TestGeneratePromptsAndWritesAfterConfirmation(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "invoice.svg")
 	cmd := exec.Command("go", "run", ".", "generate",

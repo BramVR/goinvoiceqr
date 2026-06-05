@@ -92,6 +92,7 @@ type qrWriteFunc func(string, []byte, bool) error
 type qrPathStatus struct {
 	Exists    bool
 	IsSymlink bool
+	IsDir     bool
 }
 type qrPathStatusFunc func(string) (qrPathStatus, error)
 
@@ -112,6 +113,9 @@ func preflightQROutput(options QROutputOptions, stat qrPathStatusFunc) (QROutput
 	status, err := stat(out)
 	if err != nil {
 		return QROutputPreflight{}, fmt.Errorf("out: %w", err)
+	}
+	if status.IsDir {
+		return QROutputPreflight{}, errors.New("out: already exists as directory; refusing to overwrite")
 	}
 	if status.Exists && !options.Force {
 		return QROutputPreflight{}, errors.New("out: already exists; use --force to overwrite")
@@ -225,6 +229,7 @@ func pathStatus(path string) (qrPathStatus, error) {
 		return qrPathStatus{
 			Exists:    true,
 			IsSymlink: info.Mode()&os.ModeSymlink != 0,
+			IsDir:     info.IsDir(),
 		}, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {

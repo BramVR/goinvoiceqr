@@ -29,12 +29,45 @@ type SuggestedPaymentDetailsReport struct {
 	Details   SuggestedPaymentDetails
 }
 
+type SuggestedPaymentArtifactPlanOptions struct {
+	Text      string
+	Overrides PaymentDetails
+	Output    QROutputOptions
+}
+
+type SuggestedPaymentArtifactPlan struct {
+	Report    SuggestedPaymentDetailsReport
+	HasReport bool
+	Plan      PaymentArtifactPlan
+	HasPlan   bool
+}
+
 func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetails, error) {
 	report, err := SuggestPaymentDetailsReportFromText(text, overrides)
 	if err != nil {
 		return SuggestedPaymentDetails{}, err
 	}
 	return report.Details, nil
+}
+
+func BuildSuggestedPaymentArtifactPlan(options SuggestedPaymentArtifactPlanOptions) (SuggestedPaymentArtifactPlan, error) {
+	report, err := SuggestPaymentDetailsReportFromText(options.Text, options.Overrides)
+	if err != nil {
+		return SuggestedPaymentArtifactPlan{}, err
+	}
+	plan, err := BuildPaymentArtifactPlan(PaymentArtifactPlanOptions{
+		Details: suggestedPaymentDetails(report.Details),
+		Output:  options.Output,
+	})
+	if err != nil {
+		return SuggestedPaymentArtifactPlan{Report: report, HasReport: true}, err
+	}
+	return SuggestedPaymentArtifactPlan{
+		Report:    report,
+		HasReport: true,
+		Plan:      plan,
+		HasPlan:   true,
+	}, nil
 }
 
 func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetailsReport, error) {
@@ -70,6 +103,16 @@ func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) 
 		BIC:       suggestedField(text, "bic", overrides.BIC, details.BIC),
 		Details:   details,
 	}, nil
+}
+
+func suggestedPaymentDetails(details SuggestedPaymentDetails) PaymentDetails {
+	return PaymentDetails{
+		Payee:     details.Payee,
+		IBAN:      details.IBAN,
+		Amount:    details.Amount,
+		Reference: details.Reference,
+		BIC:       details.BIC,
+	}
 }
 
 func chooseField(name, override string, candidates []string, ambiguous bool) (string, error) {

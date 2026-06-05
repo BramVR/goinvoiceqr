@@ -149,18 +149,15 @@ func generateArtifactJSONData(plan invoiceqr.PaymentArtifactPlan, result invoice
 	}
 }
 
-func suggestionDryRunJSONData(report invoiceqr.SuggestedPaymentDetailsReport, plan invoiceqr.PaymentArtifactPlan) suggestionDryRunJSON {
-	planData := generateDryRunJSONData(plan)
-	return suggestionDryRunJSON{
-		Suggestions: suggestionFieldsJSONData(report),
-		Plan:        &planData,
+func suggestionDryRunJSONData(result invoiceqr.SuggestedPaymentArtifactPlan) suggestionDryRunJSON {
+	data := suggestionDryRunJSON{
+		Suggestions: suggestionFieldsJSONData(result.Report),
 	}
-}
-
-func suggestionDryRunErrorJSONData(report invoiceqr.SuggestedPaymentDetailsReport) suggestionDryRunJSON {
-	return suggestionDryRunJSON{
-		Suggestions: suggestionFieldsJSONData(report),
+	if result.HasPlan {
+		planData := generateDryRunJSONData(result.Plan)
+		data.Plan = &planData
 	}
+	return data
 }
 
 func suggestionFieldsJSONData(report invoiceqr.SuggestedPaymentDetailsReport) suggestionFieldsJSON {

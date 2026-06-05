@@ -128,6 +128,57 @@ Reference: INV-2026-001
 	}
 }
 
+func TestBuildSuggestedPaymentArtifactPlanReturnsReportAndPlan(t *testing.T) {
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`,
+		Output: QROutputOptions{Out: "invoice.qr", Format: "svg"},
+	})
+
+	if err != nil {
+		t.Fatalf("expected suggested payment artifact plan, got %v", err)
+	}
+	if !result.HasReport || !result.HasPlan {
+		t.Fatalf("expected report and plan, got %+v", result)
+	}
+	if result.Report.IBAN.Source != "text" || result.Report.IBAN.Evidence != "IBAN: BE68 5390 0754 7034" {
+		t.Fatalf("unexpected suggestion report: %+v", result.Report.IBAN)
+	}
+	if result.Plan.Details.IBAN != "BE68539007547034" || result.Plan.Output.Format != QRFormatSVG {
+		t.Fatalf("unexpected payment artifact plan: %+v", result.Plan)
+	}
+}
+
+func TestBuildSuggestedPaymentArtifactPlanReturnsReportWithoutPlanForInvalidCompleteSuggestion(t *testing.T) {
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`,
+		Overrides: PaymentDetails{Amount: "0"},
+		Output:    QROutputOptions{Out: "invoice.qr", Format: "svg"},
+	})
+
+	if err == nil {
+		t.Fatalf("expected invalid payment artifact plan")
+	}
+	if !result.HasReport || result.HasPlan {
+		t.Fatalf("expected report without plan, got %+v", result)
+	}
+	if result.Report.Amount.Value != "0" || result.Report.Amount.Source != "override" {
+		t.Fatalf("expected invalid override in report, got %+v", result.Report.Amount)
+	}
+	if !strings.Contains(err.Error(), "amount") {
+		t.Fatalf("expected amount validation error, got %v", err)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextFindsPayeeFromCreditorIBANLine(t *testing.T) {
 	suggestion, err := SuggestPaymentDetailsFromText(`
 Total amount to pay

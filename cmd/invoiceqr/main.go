@@ -168,8 +168,14 @@ func generateSuggestedPaymentArtifact(text string, overrides invoiceqr.PaymentDe
 	}
 	return invoiceqr.GeneratePaymentArtifact(
 		invoiceqr.PaymentGenerationOptions{
-			Details: suggestionPaymentDetails(suggestion),
-			Output:  output,
+			Details: invoiceqr.PaymentDetails{
+				Payee:     suggestion.Payee,
+				IBAN:      suggestion.IBAN,
+				Amount:    suggestion.Amount,
+				Reference: suggestion.Reference,
+				BIC:       suggestion.BIC,
+			},
+			Output: output,
 		},
 		confirm,
 	)
@@ -212,21 +218,21 @@ func validateSuggestionJSONFlags(dryRun, json bool) error {
 }
 
 func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions) error {
-	report, err := invoiceqr.SuggestPaymentDetailsReportFromText(text, overrides)
-	if err != nil {
-		return printJSONError("suggestion_error", err)
-	}
-	plan, err := invoiceqr.BuildPaymentArtifactPlan(invoiceqr.PaymentArtifactPlanOptions{
-		Details: suggestionPaymentDetails(report.Details),
-		Output:  output,
+	result, err := invoiceqr.BuildSuggestedPaymentArtifactPlan(invoiceqr.SuggestedPaymentArtifactPlanOptions{
+		Text:      text,
+		Overrides: overrides,
+		Output:    output,
 	})
 	if err != nil {
-		if printErr := printJSONEnvelope(suggestionDryRunErrorJSONData(report), newCLIErrorJSON("generation_error", err)); printErr != nil {
+		if !result.HasReport {
+			return printJSONError("suggestion_error", err)
+		}
+		if printErr := printJSONEnvelope(suggestionDryRunJSONData(result), newCLIErrorJSON("generation_error", err)); printErr != nil {
 			return printErr
 		}
 		return cliExitError{code: 1}
 	}
-	return printJSONSuccess(suggestionDryRunJSONData(report, plan))
+	return printJSONSuccess(suggestionDryRunJSONData(result))
 }
 
 type commandRunner func(string, ...string) ([]byte, error)
@@ -326,16 +332,6 @@ func readInvoiceText(path string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-func suggestionPaymentDetails(details invoiceqr.SuggestedPaymentDetails) invoiceqr.PaymentDetails {
-	return invoiceqr.PaymentDetails{
-		Payee:     details.Payee,
-		IBAN:      details.IBAN,
-		Amount:    details.Amount,
-		Reference: details.Reference,
-		BIC:       details.BIC,
-	}
 }
 
 func main() {

@@ -30,7 +30,13 @@ PDF extraction, copied text, OCR, and AI may produce Suggested Payment Details o
 
 Suggested amounts are parsed as complete numeric tokens. Plain decimals such as `42.50` and `42,50` are accepted, and common thousands formats such as `1.234,56`, `1,234.56`, and `1 234,56` normalize to `1234.56`. Regular, non-breaking, and narrow non-breaking spaces are accepted as grouping whitespace.
 
+When PDF text extraction splits table cells across lines, a preferred label such as `Total amount to pay` may use the next non-empty currency-bearing line as its amount candidate. Preferred amount labels are used before generic `Total` lines so detail-table totals do not make the payable amount ambiguous.
+
 Malformed grouped values are ignored as amount candidates rather than truncated. This prevents an invoice amount such as `1.234,567` from becoming `1.23`.
+
+## Payees
+
+Suggested payees prefer explicit labels such as `Payee:` or `Supplier:`. When an invoice footer combines the creditor name and `IBAN` on one line, the legal-entity name before the address and IBAN may be used as a conservative payee candidate.
 
 ## Stdin Confirmation
 

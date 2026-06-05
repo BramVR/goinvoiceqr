@@ -108,6 +108,248 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsFromTextFindsPayeeFromCreditorIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Total amount to pay
+
+€ 15,00
+
+Structured message
++++525/7350/37337+++
+
+Mobile Vikings NV - Kempische steenweg 309 Bus 1 - 3500 Hasselt - BE 0886.946.917 - IBAN BE02 7370 2691 7240 - BIC KREDBEBB
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	assertSuggestedPaymentDetails(t, suggestion, PaymentDetails{
+		Payee:     "Mobile Vikings NV",
+		IBAN:      "BE02 7370 2691 7240",
+		Amount:    "15.00",
+		Reference: "+++525/7350/37337+++",
+	})
+}
+
+func TestSuggestPaymentDetailsFromTextFindsDottedLegalSuffixPayeeFromCreditorIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee B.V. - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Payee B.V." {
+		t.Fatalf("payee = %q, want Payee B.V.", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextStripsCreditorLabelFromIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Creditor: ACME BV - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "ACME BV" {
+		t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextCleansLabeledPayeeIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "ACME BV" {
+		t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextPrefersExplicitPayeeOverInferredIBANLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+ACME Collections BV - Main street 1 - IBAN BE68 5390 0754 7034
+Payee: ACME BV
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "ACME BV" {
+		t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextPrefersSplitTotalAmountToPay(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay
+
+€ 15,00
+Total
+
+€ 0,00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextParsesSplitAmountWithNonBreakingCurrencySpace(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay
+`+"\u00a0€\u00a015,00\u00a0"+`
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextUsesInlinePreferredAmountAfterColon(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay: 15,00
+Total: EUR 0,00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotUseNextLineForGenericTotal(t *testing.T) {
+	_, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total
+
+Reference: 42
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected amount error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "amount") {
+		t.Fatalf("expected amount error, got %v", err)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotUseReferenceAsSplitPayableAmount(t *testing.T) {
+	_, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay
+Reference: 42
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected amount error")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "amount") {
+		t.Fatalf("expected amount error, got %v", err)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFallsBackAfterNonAmountSplitLine(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay
+Due date: 2026-06-30
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "42.50" {
+		t.Fatalf("amount = %q, want 42.50", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextPrefersSplitCurrencyOverLabelNumbers(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount to pay within 7 days
+€ 15,00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotUseColonLabelTextAsPreferredAmount(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount to pay: within 7 days
+€ 15,00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotUseLabeledVATAsSplitPayableAmount(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay
+VAT: EUR 5,00
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "42.50" {
+		t.Fatalf("amount = %q, want 42.50", suggestion.Amount)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextReportsAmbiguousDateAndAmountWithoutCurrency(t *testing.T) {
 	_, err := SuggestPaymentDetailsFromText(`
 Payee: ACME BV

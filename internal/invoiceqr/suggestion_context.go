@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payment|betaal|betalen|betaling)\b`)
+
 type AgentContext struct {
 	SourceTextHash string
 	FullText       string
@@ -97,8 +99,7 @@ func agentContextLineKind(lines []string, index int) string {
 }
 
 func paymentInstructionLine(line string) bool {
-	lower := strings.ToLower(line)
-	return strings.Contains(lower, "pay") || strings.Contains(lower, "betaal") || strings.Contains(lower, "betal")
+	return paymentInstructionPattern.MatchString(line)
 }
 
 func firstNonEmptyLineIndex(lines []string) int {

@@ -60,9 +60,30 @@ type GenerateCmd struct {
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
 	ConfirmationFlags   `embed:""`
+	DryRun              bool `help:"Validate and preflight without prompting or writing."`
+	JSON                bool `help:"Print a machine-readable JSON envelope."`
 }
 
 func (cmd GenerateCmd) Run() error {
+	if cmd.DryRun {
+		if !cmd.JSON {
+			return errors.New("dry-run: requires --json")
+		}
+		plan, err := invoiceqr.BuildPaymentArtifactPlan(invoiceqr.PaymentArtifactPlanOptions{
+			Details: cmd.paymentDetails(),
+			Output:  cmd.qrOutputOptions(),
+		})
+		if err != nil {
+			if printErr := printJSONEnvelope(nil, newCLIErrorJSON("generation_error", err)); printErr != nil {
+				return printErr
+			}
+			return cliExitError{code: 1}
+		}
+		return printJSONEnvelope(generateDryRunJSONData(plan), nil)
+	}
+	if cmd.JSON {
+		return errors.New("json: requires --dry-run")
+	}
 	return invoiceqr.GeneratePaymentArtifact(
 		invoiceqr.PaymentGenerationOptions{
 			Details:          cmd.paymentDetails(),

@@ -41,6 +41,30 @@ type referenceJSON struct {
 	Kind  string `json:"kind"`
 }
 
+type generateDryRunJSON struct {
+	PaymentDetails paymentDetailsJSON `json:"payment_details"`
+	EPC            epcJSON            `json:"epc"`
+	Output         qrOutputJSON       `json:"output"`
+}
+
+type epcJSON struct {
+	ServiceTag     string `json:"service_tag"`
+	Version        string `json:"version"`
+	CharacterSet   string `json:"character_set"`
+	Identification string `json:"identification"`
+	Currency       string `json:"currency"`
+	Payload        string `json:"payload"`
+}
+
+type qrOutputJSON struct {
+	Path          string `json:"path"`
+	Format        string `json:"format"`
+	Force         bool   `json:"force"`
+	Exists        bool   `json:"exists"`
+	IsSymlink     bool   `json:"is_symlink"`
+	WillOverwrite bool   `json:"will_overwrite"`
+}
+
 func validateJSONData(details invoiceqr.ValidatedPaymentDetails) paymentDetailsJSON {
 	return paymentDetailsJSON{
 		Payee:  details.Payee,
@@ -50,6 +74,28 @@ func validateJSONData(details invoiceqr.ValidatedPaymentDetails) paymentDetailsJ
 		Reference: referenceJSON{
 			Value: details.Reference.Value,
 			Kind:  string(details.Reference.Kind),
+		},
+	}
+}
+
+func generateDryRunJSONData(plan invoiceqr.PaymentArtifactPlan) generateDryRunJSON {
+	return generateDryRunJSON{
+		PaymentDetails: validateJSONData(plan.Details),
+		EPC: epcJSON{
+			ServiceTag:     plan.EPC.ServiceTag,
+			Version:        plan.EPC.Version,
+			CharacterSet:   plan.EPC.CharacterSet,
+			Identification: plan.EPC.Identification,
+			Currency:       plan.EPC.Currency,
+			Payload:        plan.EPC.Payload,
+		},
+		Output: qrOutputJSON{
+			Path:          plan.Output.Path,
+			Format:        string(plan.Output.Format),
+			Force:         plan.Output.Force,
+			Exists:        plan.Output.Exists,
+			IsSymlink:     plan.Output.IsSymlink,
+			WillOverwrite: plan.Output.WillOverwrite,
 		},
 	}
 }

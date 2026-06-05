@@ -224,15 +224,22 @@ func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, 
 		Output:    output,
 	})
 	if err != nil {
+		var incomplete invoiceqr.IncompleteSuggestionError
+		if errors.As(err, &incomplete) {
+			if printErr := printJSONEnvelope(suggestionDryRunJSONData(result, err), newIncompleteSuggestionErrorJSON(incomplete)); printErr != nil {
+				return printErr
+			}
+			return cliExitError{code: 1}
+		}
 		if !result.HasReport {
 			return printJSONError("suggestion_error", err)
 		}
-		if printErr := printJSONEnvelope(suggestionDryRunJSONData(result), newCLIErrorJSON("generation_error", err)); printErr != nil {
+		if printErr := printJSONEnvelope(suggestionDryRunJSONData(result, err), newCLIErrorJSON("generation_error", err)); printErr != nil {
 			return printErr
 		}
 		return cliExitError{code: 1}
 	}
-	return printJSONSuccess(suggestionDryRunJSONData(result))
+	return printJSONSuccess(suggestionDryRunJSONData(result, nil))
 }
 
 type commandRunner func(string, ...string) ([]byte, error)

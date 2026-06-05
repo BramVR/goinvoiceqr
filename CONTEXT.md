@@ -16,6 +16,10 @@ _Avoid_: Detected details, parsed payment
 Payment details that have passed deterministic validation and explicit user confirmation.
 _Avoid_: Approved suggestion, trusted extraction
 
+**Payment Artifact Plan**:
+A no-write plan for a QR artifact, built from validated Payment Details, deterministic EPC payload data, and QR output preflight metadata before confirmation or filesystem output.
+_Avoid_: Payment plan, dry-run result
+
 **Manual Payment Details**:
 Payment details supplied field-by-field by the caller instead of inferred from document text.
 _Avoid_: Raw CLI args

@@ -1,5 +1,13 @@
 # invoiceqr
 
+![goinvoiceqr hero showing Belgian SEPA/EPC invoice payment QR generation](docs/assets/goinvoiceqr-hero.png)
+
+[![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![CLI](https://img.shields.io/badge/CLI-Kong-111827)](https://github.com/alecthomas/kong)
+[![QR](https://img.shields.io/badge/QR-SVG%20%2B%20PNG-06B6D4)](https://github.com/piglig/go-qr)
+[![Payments](https://img.shields.io/badge/Payments-SEPA%2FEPC-FACC15)](docs/adr/0001-use-epc-version-2-with-optional-bic.md)
+[![PDF](https://img.shields.io/badge/PDF-pdftotext-64748B)](docs/adr/0002-use-pdftotext-for-v1-pdf-extraction.md)
+
 `invoiceqr` is a Go CLI for Belgian-compatible SEPA/EPC payment QR codes.
 
 The CLI implements payment-detail validation, deterministic EPC payload construction, QR rendering, QR artifact output policy, manual QR generation, and text/PDF-based payment-detail suggestions.

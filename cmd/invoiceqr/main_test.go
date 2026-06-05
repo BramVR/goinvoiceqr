@@ -1167,6 +1167,23 @@ func TestFromTextJSONWithoutDryRunFailsBeforeReadingInput(t *testing.T) {
 	}
 }
 
+func TestFromTextDryRunJSONReadFailurePrintsErrorEnvelope(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	cmd := exec.Command(binary, "from-text", filepath.Join(t.TempDir(), "missing.txt"), "--out", "invoice.svg", "--dry-run", "--json")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected read failure")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "input_error", "", "no such file")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+}
+
 func TestFromTextStdinUsesOverridesAndTerminalConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")
@@ -1401,6 +1418,26 @@ func TestFromPDFJSONWithoutDryRunFailsBeforeExtraction(t *testing.T) {
 	}
 }
 
+func TestFromPDFDryRunJSONExtractionFailurePrintsErrorEnvelope(t *testing.T) {
+	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
+		return nil, exec.ErrNotFound
+	})
+
+	output, err := captureStdoutAndError(t, func() error {
+		return FromPDFCmd{
+			PDF:           "invoice.pdf",
+			QROutputFlags: QROutputFlags{Out: "invoice.svg"},
+			DryRun:        true,
+			JSON:          true,
+		}.Run()
+	})
+
+	if err == nil {
+		t.Fatalf("expected extraction failure")
+	}
+	assertGenerateJSONError(t, output, "extraction_error", "", "pdftotext")
+}
+
 func TestFromPDFExtractsGeneratedInvoicePDFAndWritesAfterConfirmation(t *testing.T) {
 	if _, err := exec.LookPath("pdftotext"); err != nil {
 		t.Skip("pdftotext not installed")
@@ -1631,6 +1668,16 @@ func setStdin(t *testing.T, input string) {
 func captureStdout(t *testing.T, run func() error) []byte {
 	t.Helper()
 
+	output, err := captureStdoutAndError(t, run)
+	if err != nil {
+		t.Fatalf("run command: %v", err)
+	}
+	return output
+}
+
+func captureStdoutAndError(t *testing.T, run func() error) ([]byte, error) {
+	t.Helper()
+
 	file, err := os.CreateTemp(t.TempDir(), "stdout-*.txt")
 	if err != nil {
 		t.Fatalf("create stdout: %v", err)
@@ -1642,9 +1689,7 @@ func captureStdout(t *testing.T, run func() error) []byte {
 		file.Close()
 	}()
 
-	if err := run(); err != nil {
-		t.Fatalf("run command: %v", err)
-	}
+	runErr := run()
 	if _, err := file.Seek(0, 0); err != nil {
 		t.Fatalf("seek stdout: %v", err)
 	}
@@ -1652,7 +1697,7 @@ func captureStdout(t *testing.T, run func() error) []byte {
 	if err != nil {
 		t.Fatalf("read stdout: %v", err)
 	}
-	return output
+	return output, runErr
 }
 
 func assertGenerateJSONError(t *testing.T, output []byte, code string, field string, message string) {

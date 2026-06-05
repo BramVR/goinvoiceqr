@@ -146,6 +146,9 @@ func (cmd FromTextCmd) Run() error {
 	}
 	text, err := readInvoiceText(cmd.File)
 	if err != nil {
+		if cmd.JSON {
+			return printJSONError("input_error", err)
+		}
 		return err
 	}
 	if cmd.DryRun {
@@ -186,6 +189,9 @@ func (cmd FromPDFCmd) Run() error {
 	}
 	text, err := extractPDFText(cmd.PDF, pdfTextCommandRunner)
 	if err != nil {
+		if cmd.JSON {
+			return printJSONError("extraction_error", err)
+		}
 		return err
 	}
 	if cmd.DryRun {

@@ -128,11 +128,11 @@ func preflightQROutput(options QROutputOptions, stat qrPathStatusFunc) (QROutput
 	if status.IsDir {
 		return QROutputPreflight{}, errors.New("out: already exists as directory; refusing to overwrite")
 	}
-	if status.Exists && !options.Force {
-		return QROutputPreflight{}, errors.New("out: already exists; use --force to overwrite")
-	}
 	if status.IsSymlink {
 		return QROutputPreflight{}, errors.New("out: already exists as symlink; refusing to overwrite")
+	}
+	if status.Exists && !options.Force {
+		return QROutputPreflight{}, errors.New("out: already exists; use --force to overwrite")
 	}
 
 	return QROutputPreflight{

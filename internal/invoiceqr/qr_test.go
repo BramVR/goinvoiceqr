@@ -205,6 +205,29 @@ func TestPreflightQROutputRefusesForceSymlink(t *testing.T) {
 	}
 }
 
+func TestPreflightQROutputRefusesSymlinkWithoutSuggestingForce(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.svg")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(target, []byte("target"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	symlinkOrSkip(t, target, out)
+
+	_, err := PreflightQROutput(QROutputOptions{Out: out})
+
+	if err == nil {
+		t.Fatalf("expected symlink preflight error")
+	}
+	lower := strings.ToLower(err.Error())
+	if !strings.Contains(lower, "symlink") {
+		t.Fatalf("expected symlink error, got %v", err)
+	}
+	if strings.Contains(lower, "force") {
+		t.Fatalf("expected symlink error without force suggestion, got %v", err)
+	}
+}
+
 func TestWriteQRArtifactRefusesOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")

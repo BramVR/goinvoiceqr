@@ -17,9 +17,10 @@ import (
 
 func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 	tests := []struct {
-		name  string
-		args  []string
-		flags []string
+		name      string
+		args      []string
+		flags     []string
+		helpTexts []string
 	}{
 		{
 			name: "generate",
@@ -64,6 +65,10 @@ func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 				"--dry-run",
 				"--json",
 			},
+			helpTexts: []string{
+				"Requires --json.",
+				"Requires --dry-run.",
+			},
 		},
 		{
 			name: "from-pdf",
@@ -80,6 +85,10 @@ func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 				"--dry-run",
 				"--json",
 			},
+			helpTexts: []string{
+				"Requires --json.",
+				"Requires --dry-run.",
+			},
 		},
 	}
 
@@ -94,6 +103,12 @@ func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 			for _, flag := range tt.flags {
 				if !strings.Contains(string(output), flag) {
 					t.Fatalf("expected help to contain %q, got:\n%s", flag, output)
+				}
+			}
+			normalizedHelp := strings.Join(strings.Fields(string(output)), " ")
+			for _, helpText := range tt.helpTexts {
+				if !strings.Contains(normalizedHelp, helpText) {
+					t.Fatalf("expected help to contain %q, got:\n%s", helpText, output)
 				}
 			}
 		})

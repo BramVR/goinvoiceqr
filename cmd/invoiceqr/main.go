@@ -136,8 +136,8 @@ type FromTextCmd struct {
 	File                string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
-	DryRun              bool `help:"Suggest and preflight without prompting or writing."`
-	JSON                bool `help:"Print a machine-readable JSON envelope."`
+	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
+	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
 }
 
 func (cmd FromTextCmd) Run() error {
@@ -185,8 +185,8 @@ type FromPDFCmd struct {
 	PDF                 string `arg:"" help:"Invoice PDF path."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
-	DryRun              bool `help:"Suggest and preflight without prompting or writing."`
-	JSON                bool `help:"Print a machine-readable JSON envelope."`
+	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
+	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
 }
 
 func (cmd FromPDFCmd) Run() error {

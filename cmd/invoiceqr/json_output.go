@@ -78,6 +78,7 @@ type suggestionFieldJSON struct {
 
 type agentContextJSON struct {
 	SourceTextHash string                     `json:"source_text_hash"`
+	FullText       string                     `json:"full_text,omitempty"`
 	ObservedLines  []agentContextObservedJSON `json:"observed_lines"`
 	Candidates     agentContextCandidatesJSON `json:"candidates"`
 }
@@ -200,6 +201,7 @@ func suggestionDryRunJSONData(result invoiceqr.SuggestedPaymentArtifactPlan, err
 func agentContextJSONData(context invoiceqr.AgentContext) agentContextJSON {
 	return agentContextJSON{
 		SourceTextHash: context.SourceTextHash,
+		FullText:       context.FullText,
 		ObservedLines:  agentContextObservedJSONData(context.ObservedLines),
 		Candidates: agentContextCandidatesJSON{
 			Payee:     agentContextCandidateJSONData(context.Candidates.Payee),

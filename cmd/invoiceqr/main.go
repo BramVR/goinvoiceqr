@@ -133,11 +133,10 @@ func (cmd ValidateCmd) Run() error {
 }
 
 type FromTextCmd struct {
-	File                string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
-	PaymentDetailsFlags `embed:""`
-	QROutputFlags       `embed:""`
-	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
-	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
+	File                  string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
+	PaymentDetailsFlags   `embed:""`
+	QROutputFlags         `embed:""`
+	SuggestionDryRunFlags `embed:""`
 }
 
 func (cmd FromTextCmd) Run() error {
@@ -152,7 +151,7 @@ func (cmd FromTextCmd) Run() error {
 		return err
 	}
 	if cmd.DryRun {
-		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions(), cmd.FullText)
 	}
 	confirm := confirmPaymentDetails
 	if cmd.File == "" {
@@ -182,11 +181,16 @@ func generateSuggestedPaymentArtifact(text string, overrides invoiceqr.PaymentDe
 }
 
 type FromPDFCmd struct {
-	PDF                 string `arg:"" help:"Invoice PDF path."`
-	PaymentDetailsFlags `embed:""`
-	QROutputFlags       `embed:""`
-	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
-	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
+	PDF                   string `arg:"" help:"Invoice PDF path."`
+	PaymentDetailsFlags   `embed:""`
+	QROutputFlags         `embed:""`
+	SuggestionDryRunFlags `embed:""`
+}
+
+type SuggestionDryRunFlags struct {
+	DryRun   bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
+	JSON     bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
+	FullText bool `help:"Include full extracted text in Agent Context JSON."`
 }
 
 func (cmd FromPDFCmd) Run() error {
@@ -201,7 +205,7 @@ func (cmd FromPDFCmd) Run() error {
 		return err
 	}
 	if cmd.DryRun {
-		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions(), cmd.FullText)
 	}
 	return generateSuggestedPaymentArtifact(text, cmd.paymentDetails(), cmd.qrOutputOptions(), confirmPaymentDetails)
 }
@@ -217,11 +221,12 @@ func validateSuggestionJSONFlags(dryRun, json bool) error {
 	}
 }
 
-func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions) error {
+func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions, includeFullText bool) error {
 	result, err := invoiceqr.BuildSuggestedPaymentArtifactPlan(invoiceqr.SuggestedPaymentArtifactPlanOptions{
-		Text:      text,
-		Overrides: overrides,
-		Output:    output,
+		Text:            text,
+		Overrides:       overrides,
+		Output:          output,
+		IncludeFullText: includeFullText,
 	})
 	if err != nil {
 		var incomplete invoiceqr.IncompleteSuggestionError

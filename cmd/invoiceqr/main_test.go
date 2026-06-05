@@ -871,6 +871,9 @@ func TestFromTextDryRunJSONPrintsSuggestionsWithEvidenceAndPlan(t *testing.T) {
 	if strings.Contains(string(output), "Write QR artifact") || strings.Contains(string(output), "Payment Details") {
 		t.Fatalf("expected JSON-only dry-run output, got:\n%s", output)
 	}
+	if strings.Contains(string(output), "full_text") {
+		t.Fatalf("expected compact Agent Context by default, got:\n%s", output)
+	}
 	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
 	}
@@ -948,6 +951,38 @@ func TestFromTextDryRunJSONPrintsSuggestionsWithEvidenceAndPlan(t *testing.T) {
 	}
 	if envelope.Data.Plan.Output.Path != out || envelope.Data.Plan.Output.Format != "svg" {
 		t.Fatalf("expected output plan, got %+v", envelope.Data.Plan.Output)
+	}
+}
+
+func TestFromTextDryRunJSONFullTextOptInIncludesSourceText(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "invoice.txt")
+	out := filepath.Join(dir, "invoice.svg")
+	text := clearInvoiceText()
+	if err := os.WriteFile(input, []byte(text), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	cmd := exec.Command("go", "run", ".", "from-text", input, "--out", out, "--dry-run", "--json", "--full-text")
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("expected from-text dry-run JSON to succeed, output:\n%s", output)
+	}
+	var envelope struct {
+		Data struct {
+			AgentContext struct {
+				FullText string `json:"full_text"`
+			} `json:"agent_context"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if envelope.Data.AgentContext.FullText != text {
+		t.Fatalf("full text = %q, want %q", envelope.Data.AgentContext.FullText, text)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
 	}
 }
 
@@ -1285,8 +1320,8 @@ func TestFromTextDryRunJSONInvalidCompleteSuggestionOmitsEPCPayload(t *testing.T
 
 func TestFromTextDryRunWithoutJSONFailsBeforeReadingInput(t *testing.T) {
 	err := FromTextCmd{
-		File:   filepath.Join(t.TempDir(), "missing.txt"),
-		DryRun: true,
+		File:                  filepath.Join(t.TempDir(), "missing.txt"),
+		SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true},
 	}.Run()
 
 	if err == nil {
@@ -1299,8 +1334,8 @@ func TestFromTextDryRunWithoutJSONFailsBeforeReadingInput(t *testing.T) {
 
 func TestFromTextJSONWithoutDryRunFailsBeforeReadingInput(t *testing.T) {
 	err := FromTextCmd{
-		File: filepath.Join(t.TempDir(), "missing.txt"),
-		JSON: true,
+		File:                  filepath.Join(t.TempDir(), "missing.txt"),
+		SuggestionDryRunFlags: SuggestionDryRunFlags{JSON: true},
 	}.Run()
 
 	if err == nil {
@@ -1468,10 +1503,9 @@ func TestFromPDFDryRunJSONUsesExtractedTextEvidence(t *testing.T) {
 
 	output := captureStdout(t, func() error {
 		return FromPDFCmd{
-			PDF:           "invoice.pdf",
-			QROutputFlags: QROutputFlags{Out: out},
-			DryRun:        true,
-			JSON:          true,
+			PDF:                   "invoice.pdf",
+			QROutputFlags:         QROutputFlags{Out: out},
+			SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true, JSON: true},
 		}.Run()
 	})
 
@@ -1499,6 +1533,9 @@ func TestFromPDFDryRunJSONUsesExtractedTextEvidence(t *testing.T) {
 	if !envelope.Success || envelope.Error != nil {
 		t.Fatalf("expected success envelope, got:\n%s", output)
 	}
+	if strings.Contains(string(output), "full_text") {
+		t.Fatalf("expected compact Agent Context by default, got:\n%s", output)
+	}
 	if envelope.Data.Suggestions.IBAN.Value != "BE68 5390 0754 7034" || envelope.Data.Suggestions.IBAN.Source != "text" {
 		t.Fatalf("unexpected iban suggestion: %+v", envelope.Data.Suggestions.IBAN)
 	}
@@ -1516,6 +1553,42 @@ func TestFromPDFDryRunJSONUsesExtractedTextEvidence(t *testing.T) {
 	}
 }
 
+func TestFromPDFDryRunJSONFullTextOptInIncludesExtractedText(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	text := clearInvoiceText()
+	withPDFTextCommandRunner(t, func(name string, args ...string) ([]byte, error) {
+		if name != "pdftotext" || strings.Join(args, "\x00") != strings.Join([]string{"invoice.pdf", "-"}, "\x00") {
+			t.Fatalf("unexpected pdftotext call %s %#v", name, args)
+		}
+		return []byte(text), nil
+	})
+
+	output := captureStdout(t, func() error {
+		return FromPDFCmd{
+			PDF:                   "invoice.pdf",
+			QROutputFlags:         QROutputFlags{Out: out},
+			SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true, JSON: true, FullText: true},
+		}.Run()
+	})
+
+	var envelope struct {
+		Data struct {
+			AgentContext struct {
+				FullText string `json:"full_text"`
+			} `json:"agent_context"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if envelope.Data.AgentContext.FullText != text {
+		t.Fatalf("full text = %q, want %q", envelope.Data.AgentContext.FullText, text)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
+	}
+}
+
 func TestFromPDFDryRunWithoutJSONFailsBeforeExtraction(t *testing.T) {
 	called := false
 	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
@@ -1524,8 +1597,8 @@ func TestFromPDFDryRunWithoutJSONFailsBeforeExtraction(t *testing.T) {
 	})
 
 	err := FromPDFCmd{
-		PDF:    "invoice.pdf",
-		DryRun: true,
+		PDF:                   "invoice.pdf",
+		SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true},
 	}.Run()
 
 	if err == nil {
@@ -1547,8 +1620,8 @@ func TestFromPDFJSONWithoutDryRunFailsBeforeExtraction(t *testing.T) {
 	})
 
 	err := FromPDFCmd{
-		PDF:  "invoice.pdf",
-		JSON: true,
+		PDF:                   "invoice.pdf",
+		SuggestionDryRunFlags: SuggestionDryRunFlags{JSON: true},
 	}.Run()
 
 	if err == nil {
@@ -1569,10 +1642,9 @@ func TestFromPDFDryRunJSONExtractionFailurePrintsErrorEnvelope(t *testing.T) {
 
 	output, err := captureStdoutAndError(t, func() error {
 		return FromPDFCmd{
-			PDF:           "invoice.pdf",
-			QROutputFlags: QROutputFlags{Out: "invoice.svg"},
-			DryRun:        true,
-			JSON:          true,
+			PDF:                   "invoice.pdf",
+			QROutputFlags:         QROutputFlags{Out: "invoice.svg"},
+			SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true, JSON: true},
 		}.Run()
 	})
 

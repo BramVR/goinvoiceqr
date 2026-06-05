@@ -287,6 +287,29 @@ func TestWriteQRArtifactAllowsForceOverwrite(t *testing.T) {
 	}
 }
 
+func TestWritePlannedQRArtifactWithResultReportsArtifactMetadata(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+
+	result, err := WritePlannedQRArtifactWithResult(sampleEPCPayload, QROutputPreflight{
+		Path:   out,
+		Format: QRFormatSVG,
+	})
+
+	if err != nil {
+		t.Fatalf("expected write result, got %v", err)
+	}
+	data, readErr := os.ReadFile(out)
+	if readErr != nil {
+		t.Fatalf("read output: %v", readErr)
+	}
+	if result.Path != out || result.Format != QRFormatSVG {
+		t.Fatalf("unexpected artifact metadata: %+v", result)
+	}
+	if result.ByteCount != len(data) || result.ByteCount <= 0 {
+		t.Fatalf("expected byte count %d, got %+v", len(data), result)
+	}
+}
+
 func TestWriteQRArtifactRefusesForceSymlinkOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "target.svg")

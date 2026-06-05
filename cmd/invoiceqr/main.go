@@ -79,7 +79,7 @@ func (cmd GenerateCmd) Run() error {
 		return printJSONSuccess(generateDryRunJSONData(plan))
 	}
 	if cmd.JSON {
-		return errors.New("json: requires --dry-run")
+		return cmd.runJSON()
 	}
 	return invoiceqr.GeneratePaymentArtifact(
 		invoiceqr.PaymentGenerationOptions{
@@ -89,6 +89,27 @@ func (cmd GenerateCmd) Run() error {
 		},
 		confirmPaymentDetails,
 	)
+}
+
+func (cmd GenerateCmd) runJSON() error {
+	var confirm invoiceqr.PaymentConfirmationFunc
+	if !cmd.Yes {
+		confirm = func(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+			return confirmPaymentDetailsWithInputOutput(details, os.Stdin, os.Stderr)
+		}
+	}
+	result, err := invoiceqr.GeneratePaymentArtifactWithResult(
+		invoiceqr.PaymentGenerationOptions{
+			Details:          cmd.paymentDetails(),
+			Output:           cmd.qrOutputOptions(),
+			SkipConfirmation: cmd.Yes,
+		},
+		confirm,
+	)
+	if err != nil {
+		return printJSONError("generation_error", err)
+	}
+	return printJSONSuccess(generateArtifactJSONData(result.Plan, result.Artifact))
 }
 
 type ValidateCmd struct {
@@ -181,15 +202,19 @@ func extractPDFText(path string, runner commandRunner) (string, error) {
 }
 
 func printPaymentDetails(details invoiceqr.ValidatedPaymentDetails) {
-	fmt.Println("Payment Details")
-	fmt.Printf("Payee: %s\n", details.Payee)
-	fmt.Printf("IBAN: %s\n", details.IBAN)
-	fmt.Printf("Amount: EUR%s\n", details.Amount)
+	printPaymentDetailsTo(os.Stdout, details)
+}
+
+func printPaymentDetailsTo(output io.Writer, details invoiceqr.ValidatedPaymentDetails) {
+	fmt.Fprintln(output, "Payment Details")
+	fmt.Fprintf(output, "Payee: %s\n", details.Payee)
+	fmt.Fprintf(output, "IBAN: %s\n", details.IBAN)
+	fmt.Fprintf(output, "Amount: EUR%s\n", details.Amount)
 	if details.BIC != "" {
-		fmt.Printf("BIC: %s\n", details.BIC)
+		fmt.Fprintf(output, "BIC: %s\n", details.BIC)
 	}
-	fmt.Printf("Reference: %s\n", details.Reference.Value)
-	fmt.Printf("Reference Type: %s\n", referenceTypeLabel(details.Reference.Kind))
+	fmt.Fprintf(output, "Reference: %s\n", details.Reference.Value)
+	fmt.Fprintf(output, "Reference Type: %s\n", referenceTypeLabel(details.Reference.Kind))
 }
 
 func referenceTypeLabel(kind invoiceqr.RemittanceKind) string {
@@ -215,8 +240,12 @@ func confirmPaymentDetailsFromTerminal(details invoiceqr.ValidatedPaymentDetails
 }
 
 func confirmPaymentDetailsWithInput(details invoiceqr.ValidatedPaymentDetails, input io.Reader) (bool, error) {
-	printPaymentDetails(details)
-	fmt.Print("Write QR artifact? [y/N]: ")
+	return confirmPaymentDetailsWithInputOutput(details, input, os.Stdout)
+}
+
+func confirmPaymentDetailsWithInputOutput(details invoiceqr.ValidatedPaymentDetails, input io.Reader, output io.Writer) (bool, error) {
+	printPaymentDetailsTo(output, details)
+	fmt.Fprint(output, "Write QR artifact? [y/N]: ")
 
 	answer, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

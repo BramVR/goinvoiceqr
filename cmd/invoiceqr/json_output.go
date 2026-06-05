@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 
@@ -54,8 +55,11 @@ type generateArtifactJSON struct {
 }
 
 type suggestionDryRunJSON struct {
-	Suggestions suggestionFieldsJSON `json:"suggestions"`
-	Plan        *generateDryRunJSON  `json:"plan,omitempty"`
+	Suggestions     suggestionFieldsJSON `json:"suggestions"`
+	MissingFields   []string             `json:"missing_fields,omitempty"`
+	AmbiguousFields []string             `json:"ambiguous_fields,omitempty"`
+	AgentContext    agentContextJSON     `json:"agent_context"`
+	Plan            *generateDryRunJSON  `json:"plan,omitempty"`
 }
 
 type suggestionFieldsJSON struct {
@@ -70,6 +74,33 @@ type suggestionFieldJSON struct {
 	Value    string `json:"value"`
 	Source   string `json:"source"`
 	Evidence string `json:"evidence,omitempty"`
+}
+
+type agentContextJSON struct {
+	SourceTextHash string                     `json:"source_text_hash"`
+	ObservedLines  []agentContextObservedJSON `json:"observed_lines"`
+	Candidates     agentContextCandidatesJSON `json:"candidates"`
+}
+
+type agentContextObservedJSON struct {
+	Kind string `json:"kind"`
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
+type agentContextCandidatesJSON struct {
+	Payee     []agentContextCandidateJSON `json:"payee,omitempty"`
+	IBAN      []agentContextCandidateJSON `json:"iban,omitempty"`
+	Amount    []agentContextCandidateJSON `json:"amount,omitempty"`
+	Reference []agentContextCandidateJSON `json:"reference,omitempty"`
+}
+
+type agentContextCandidateJSON struct {
+	Value      string `json:"value"`
+	Normalized string `json:"normalized,omitempty"`
+	Evidence   string `json:"evidence"`
+	Line       int    `json:"line"`
+	Kind       string `json:"kind,omitempty"`
 }
 
 type epcJSON struct {
@@ -149,13 +180,58 @@ func generateArtifactJSONData(plan invoiceqr.PaymentArtifactPlan, result invoice
 	}
 }
 
-func suggestionDryRunJSONData(result invoiceqr.SuggestedPaymentArtifactPlan) suggestionDryRunJSON {
+func suggestionDryRunJSONData(result invoiceqr.SuggestedPaymentArtifactPlan, err error) suggestionDryRunJSON {
 	data := suggestionDryRunJSON{
-		Suggestions: suggestionFieldsJSONData(result.Report),
+		Suggestions:  suggestionFieldsJSONData(result.Report),
+		AgentContext: agentContextJSONData(result.Report.AgentContext),
+	}
+	var incomplete invoiceqr.IncompleteSuggestionError
+	if errors.As(err, &incomplete) {
+		data.MissingFields = incomplete.MissingFields()
+		data.AmbiguousFields = incomplete.AmbiguousFields()
 	}
 	if result.HasPlan {
 		planData := generateDryRunJSONData(result.Plan)
 		data.Plan = &planData
+	}
+	return data
+}
+
+func agentContextJSONData(context invoiceqr.AgentContext) agentContextJSON {
+	return agentContextJSON{
+		SourceTextHash: context.SourceTextHash,
+		ObservedLines:  agentContextObservedJSONData(context.ObservedLines),
+		Candidates: agentContextCandidatesJSON{
+			Payee:     agentContextCandidateJSONData(context.Candidates.Payee),
+			IBAN:      agentContextCandidateJSONData(context.Candidates.IBAN),
+			Amount:    agentContextCandidateJSONData(context.Candidates.Amount),
+			Reference: agentContextCandidateJSONData(context.Candidates.Reference),
+		},
+	}
+}
+
+func agentContextObservedJSONData(lines []invoiceqr.AgentContextObservedLine) []agentContextObservedJSON {
+	data := make([]agentContextObservedJSON, 0, len(lines))
+	for _, line := range lines {
+		data = append(data, agentContextObservedJSON{
+			Kind: line.Kind,
+			Line: line.Line,
+			Text: line.Text,
+		})
+	}
+	return data
+}
+
+func agentContextCandidateJSONData(candidates []invoiceqr.AgentContextCandidate) []agentContextCandidateJSON {
+	data := make([]agentContextCandidateJSON, 0, len(candidates))
+	for _, candidate := range candidates {
+		data = append(data, agentContextCandidateJSON{
+			Value:      candidate.Value,
+			Normalized: candidate.Normalized,
+			Evidence:   candidate.Evidence,
+			Line:       candidate.Line,
+			Kind:       candidate.Kind,
+		})
 	}
 	return data
 }

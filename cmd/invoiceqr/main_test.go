@@ -1034,7 +1034,51 @@ Reference: INV-1
 	if err == nil {
 		t.Fatalf("expected ambiguity failure")
 	}
-	assertGenerateJSONError(t, stdout.Bytes(), "suggestion_error", "amount", "ambiguous")
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				Payee struct {
+					Value string `json:"value"`
+				} `json:"payee"`
+				Amount struct {
+					Value string `json:"value"`
+				} `json:"amount"`
+			} `json:"suggestions"`
+			MissingFields   []string `json:"missing_fields"`
+			AmbiguousFields []string `json:"ambiguous_fields"`
+			AgentContext    struct {
+				Candidates struct {
+					Amount []struct {
+						Value      string `json:"value"`
+						Normalized string `json:"normalized"`
+					} `json:"amount"`
+				} `json:"candidates"`
+			} `json:"agent_context"`
+			Plan any `json:"plan"`
+		} `json:"data"`
+		Error cliErrorJSON `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if envelope.Success || envelope.Error.Code != "incomplete_suggestion" || envelope.Error.Field != "amount" || envelope.Error.Message != "ambiguous" {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
+	}
+	if envelope.Data.Suggestions.Payee.Value != "ACME BV" || envelope.Data.Suggestions.Amount.Value != "" {
+		t.Fatalf("unexpected partial suggestions: %+v", envelope.Data.Suggestions)
+	}
+	if len(envelope.Data.MissingFields) != 0 || strings.Join(envelope.Data.AmbiguousFields, ",") != "amount" {
+		t.Fatalf("unexpected incomplete fields: missing=%v ambiguous=%v", envelope.Data.MissingFields, envelope.Data.AmbiguousFields)
+	}
+	if envelope.Data.Plan != nil {
+		t.Fatalf("expected no plan for incomplete suggestion, got %#v", envelope.Data.Plan)
+	}
+	if len(envelope.Data.AgentContext.Candidates.Amount) != 2 ||
+		envelope.Data.AgentContext.Candidates.Amount[0].Normalized != "42.50" ||
+		envelope.Data.AgentContext.Candidates.Amount[1].Normalized != "12.00" {
+		t.Fatalf("unexpected amount candidates: %+v", envelope.Data.AgentContext.Candidates.Amount)
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -1065,7 +1109,38 @@ Reference: INV-1
 	if err == nil {
 		t.Fatalf("expected iban ambiguity failure")
 	}
-	assertGenerateJSONError(t, stdout.Bytes(), "suggestion_error", "iban", "ambiguous")
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			AmbiguousFields []string `json:"ambiguous_fields"`
+			AgentContext    struct {
+				Candidates struct {
+					IBAN []struct {
+						Normalized string `json:"normalized"`
+					} `json:"iban"`
+				} `json:"candidates"`
+			} `json:"agent_context"`
+			Plan any `json:"plan"`
+		} `json:"data"`
+		Error cliErrorJSON `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if envelope.Success || envelope.Error.Code != "incomplete_suggestion" || envelope.Error.Field != "iban" || envelope.Error.Message != "ambiguous" {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
+	}
+	if strings.Join(envelope.Data.AmbiguousFields, ",") != "iban" {
+		t.Fatalf("unexpected ambiguous fields: %v", envelope.Data.AmbiguousFields)
+	}
+	if len(envelope.Data.AgentContext.Candidates.IBAN) != 2 ||
+		envelope.Data.AgentContext.Candidates.IBAN[0].Normalized != "BE68539007547034" ||
+		envelope.Data.AgentContext.Candidates.IBAN[1].Normalized != "NL91ABNA0417164300" {
+		t.Fatalf("unexpected iban candidates: %+v", envelope.Data.AgentContext.Candidates.IBAN)
+	}
+	if envelope.Data.Plan != nil {
+		t.Fatalf("expected no plan for incomplete suggestion, got %#v", envelope.Data.Plan)
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}
@@ -1091,7 +1166,61 @@ Reference: INV-1
 	if err == nil {
 		t.Fatalf("expected missing-field failure")
 	}
-	assertGenerateJSONError(t, stdout.Bytes(), "suggestion_error", "iban", "required")
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				Payee struct {
+					Value string `json:"value"`
+				} `json:"payee"`
+				IBAN struct {
+					Value string `json:"value"`
+				} `json:"iban"`
+				Amount struct {
+					Value string `json:"value"`
+				} `json:"amount"`
+				Reference struct {
+					Value string `json:"value"`
+				} `json:"reference"`
+			} `json:"suggestions"`
+			MissingFields   []string `json:"missing_fields"`
+			AmbiguousFields []string `json:"ambiguous_fields"`
+			AgentContext    struct {
+				SourceTextHash string `json:"source_text_hash"`
+				Candidates     struct {
+					Amount []struct {
+						Value      string `json:"value"`
+						Normalized string `json:"normalized"`
+						Line       int    `json:"line"`
+					} `json:"amount"`
+				} `json:"candidates"`
+			} `json:"agent_context"`
+			Plan any `json:"plan"`
+		} `json:"data"`
+		Error cliErrorJSON `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if envelope.Success || envelope.Error.Code != "incomplete_suggestion" || envelope.Error.Field != "iban" || envelope.Error.Message != "required" {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
+	}
+	if envelope.Data.Suggestions.Payee.Value != "ACME BV" || envelope.Data.Suggestions.Amount.Value != "42.50" ||
+		envelope.Data.Suggestions.Reference.Value != "INV-1" || envelope.Data.Suggestions.IBAN.Value != "" {
+		t.Fatalf("unexpected partial suggestions: %+v", envelope.Data.Suggestions)
+	}
+	if strings.Join(envelope.Data.MissingFields, ",") != "iban" || len(envelope.Data.AmbiguousFields) != 0 {
+		t.Fatalf("unexpected incomplete fields: missing=%v ambiguous=%v", envelope.Data.MissingFields, envelope.Data.AmbiguousFields)
+	}
+	if envelope.Data.Plan != nil {
+		t.Fatalf("expected no plan for incomplete suggestion, got %#v", envelope.Data.Plan)
+	}
+	if envelope.Data.AgentContext.SourceTextHash == "" || len(envelope.Data.AgentContext.Candidates.Amount) != 1 ||
+		envelope.Data.AgentContext.Candidates.Amount[0].Value != "42.50" ||
+		envelope.Data.AgentContext.Candidates.Amount[0].Normalized != "42.50" ||
+		envelope.Data.AgentContext.Candidates.Amount[0].Line == 0 {
+		t.Fatalf("unexpected agent context: %+v", envelope.Data.AgentContext)
+	}
 	if stderr.Len() != 0 {
 		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
 	}

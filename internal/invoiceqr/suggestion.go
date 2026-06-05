@@ -43,6 +43,40 @@ type SuggestedPaymentArtifactPlan struct {
 	HasPlan   bool
 }
 
+type SuggestionFieldIssue struct {
+	Field  string
+	Reason string
+}
+
+type IncompleteSuggestionError struct {
+	Issues []SuggestionFieldIssue
+}
+
+func (err IncompleteSuggestionError) Error() string {
+	if len(err.Issues) == 0 {
+		return "suggestion: incomplete"
+	}
+	return fmt.Sprintf("%s: %s", err.Issues[0].Field, err.Issues[0].Reason)
+}
+
+func (err IncompleteSuggestionError) MissingFields() []string {
+	return err.fieldsWithReason("required")
+}
+
+func (err IncompleteSuggestionError) AmbiguousFields() []string {
+	return err.fieldsWithReason("ambiguous")
+}
+
+func (err IncompleteSuggestionError) fieldsWithReason(reason string) []string {
+	fields := []string{}
+	for _, issue := range err.Issues {
+		if issue.Reason == reason {
+			fields = append(fields, issue.Field)
+		}
+	}
+	return fields
+}
+
 func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetails, error) {
 	report, err := SuggestPaymentDetailsReportFromText(text, overrides)
 	if err != nil {
@@ -54,7 +88,7 @@ func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (Sugge
 func BuildSuggestedPaymentArtifactPlan(options SuggestedPaymentArtifactPlanOptions) (SuggestedPaymentArtifactPlan, error) {
 	report, err := SuggestPaymentDetailsReportFromText(options.Text, options.Overrides)
 	if err != nil {
-		return SuggestedPaymentArtifactPlan{}, err
+		return SuggestedPaymentArtifactPlan{Report: report, HasReport: true}, err
 	}
 	plan, err := BuildPaymentArtifactPlan(PaymentArtifactPlanOptions{
 		Details: suggestedPaymentDetails(report.Details),
@@ -72,21 +106,22 @@ func BuildSuggestedPaymentArtifactPlan(options SuggestedPaymentArtifactPlanOptio
 }
 
 func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetailsReport, error) {
-	payee, err := chooseField("payee", overrides.Payee, findPayeeCandidates(text), false)
-	if err != nil {
-		return SuggestedPaymentDetailsReport{}, err
+	issues := []SuggestionFieldIssue{}
+	payee, issue := chooseField("payee", overrides.Payee, findPayeeCandidates(text), false)
+	if issue != nil {
+		issues = append(issues, *issue)
 	}
-	iban, err := chooseField("iban", overrides.IBAN, findIBANCandidates(text), true)
-	if err != nil {
-		return SuggestedPaymentDetailsReport{}, err
+	iban, issue := chooseField("iban", overrides.IBAN, findIBANCandidates(text), true)
+	if issue != nil {
+		issues = append(issues, *issue)
 	}
-	amount, err := chooseField("amount", overrides.Amount, findAmountCandidates(text), true)
-	if err != nil {
-		return SuggestedPaymentDetailsReport{}, err
+	amount, issue := chooseField("amount", overrides.Amount, findAmountCandidates(text), true)
+	if issue != nil {
+		issues = append(issues, *issue)
 	}
-	reference, err := chooseField("reference", overrides.Reference, findReferenceCandidates(text), false)
-	if err != nil {
-		return SuggestedPaymentDetailsReport{}, err
+	reference, issue := chooseField("reference", overrides.Reference, findReferenceCandidates(text), false)
+	if issue != nil {
+		issues = append(issues, *issue)
 	}
 
 	details := SuggestedPaymentDetails{
@@ -96,7 +131,7 @@ func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) 
 		Reference: reference,
 		BIC:       strings.TrimSpace(overrides.BIC),
 	}
-	return SuggestedPaymentDetailsReport{
+	report := SuggestedPaymentDetailsReport{
 		Payee:        suggestedField(text, "payee", overrides.Payee, payee),
 		IBAN:         suggestedField(text, "iban", overrides.IBAN, iban),
 		Amount:       suggestedField(text, "amount", overrides.Amount, amount),
@@ -104,7 +139,11 @@ func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) 
 		BIC:          suggestedField(text, "bic", overrides.BIC, details.BIC),
 		AgentContext: buildAgentContext(text),
 		Details:      details,
-	}, nil
+	}
+	if len(issues) > 0 {
+		return report, IncompleteSuggestionError{Issues: issues}
+	}
+	return report, nil
 }
 
 func suggestedPaymentDetails(details SuggestedPaymentDetails) PaymentDetails {
@@ -117,18 +156,18 @@ func suggestedPaymentDetails(details SuggestedPaymentDetails) PaymentDetails {
 	}
 }
 
-func chooseField(name, override string, candidates []string, ambiguous bool) (string, error) {
+func chooseField(name, override string, candidates []string, ambiguous bool) (string, *SuggestionFieldIssue) {
 	if strings.TrimSpace(override) != "" {
 		return strings.TrimSpace(override), nil
 	}
 	switch len(candidates) {
 	case 0:
-		return "", fmt.Errorf("%s: required", name)
+		return "", &SuggestionFieldIssue{Field: name, Reason: "required"}
 	case 1:
 		return candidates[0], nil
 	default:
 		if ambiguous {
-			return "", fmt.Errorf("%s: ambiguous", name)
+			return "", &SuggestionFieldIssue{Field: name, Reason: "ambiguous"}
 		}
 		return candidates[0], nil
 	}

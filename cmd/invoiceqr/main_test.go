@@ -1318,6 +1318,115 @@ func TestFromTextDryRunJSONInvalidCompleteSuggestionOmitsEPCPayload(t *testing.T
 	}
 }
 
+func TestFromTextDryRunJSONEcopowerAgentContextRecovery(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	dir := t.TempDir()
+	invoice := filepath.Join(dir, "ecopower.txt")
+	out := filepath.Join(dir, "invoice.svg")
+	text := ecopowerInvoiceText()
+	if err := os.WriteFile(invoice, []byte(text), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	initial := exec.Command(binary, "from-text", invoice, "--out", out, "--dry-run", "--json")
+	var initialStdout, initialStderr bytes.Buffer
+	initial.Stdout = &initialStdout
+	initial.Stderr = &initialStderr
+	err := initial.Run()
+	if err == nil {
+		t.Fatalf("expected incomplete suggestion")
+	}
+	var incomplete struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				IBAN struct {
+					Value string `json:"value"`
+				} `json:"iban"`
+				Reference struct {
+					Value string `json:"value"`
+				} `json:"reference"`
+			} `json:"suggestions"`
+			MissingFields []string `json:"missing_fields"`
+			AgentContext  struct {
+				ObservedLines []struct {
+					Kind string `json:"kind"`
+					Text string `json:"text"`
+				} `json:"observed_lines"`
+			} `json:"agent_context"`
+			Plan any `json:"plan"`
+		} `json:"data"`
+		Error cliErrorJSON `json:"error"`
+	}
+	if err := json.Unmarshal(initialStdout.Bytes(), &incomplete); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, initialStdout.String(), initialStderr.String())
+	}
+	if incomplete.Success || incomplete.Error.Code != "incomplete_suggestion" {
+		t.Fatalf("expected incomplete suggestion envelope, got %+v", incomplete)
+	}
+	if incomplete.Data.Suggestions.IBAN.Value != "BE68 5390 0754 7034" {
+		t.Fatalf("expected IBAN suggestion, got %+v", incomplete.Data.Suggestions.IBAN)
+	}
+	if incomplete.Data.Suggestions.Reference.Value != "+++123/4567/89002+++" {
+		t.Fatalf("expected Belgian Structured Reference suggestion, got %+v", incomplete.Data.Suggestions.Reference)
+	}
+	if !stringSliceContains(incomplete.Data.MissingFields, "payee") || !stringSliceContains(incomplete.Data.MissingFields, "amount") {
+		t.Fatalf("expected missing payee and amount, got %v", incomplete.Data.MissingFields)
+	}
+	if !observedLineContains(incomplete.Data.AgentContext.ObservedLines, "payment_instruction", "Gelieve het bedrag te betalen") {
+		t.Fatalf("expected payment instruction in Agent Context, got %+v", incomplete.Data.AgentContext.ObservedLines)
+	}
+	if !observedLineContains(incomplete.Data.AgentContext.ObservedLines, "iban_context", "Ecopower cv") {
+		t.Fatalf("expected creditor footer in Agent Context, got %+v", incomplete.Data.AgentContext.ObservedLines)
+	}
+	if incomplete.Data.Plan != nil {
+		t.Fatalf("expected no plan for incomplete suggestion, got %#v", incomplete.Data.Plan)
+	}
+	if initialStderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", initialStderr.String())
+	}
+
+	resolved := exec.Command(binary, "from-text", invoice,
+		"--payee", "Ecopower cv",
+		"--amount", "87.65",
+		"--out", out,
+		"--dry-run",
+		"--json",
+	)
+	output, err := resolved.Output()
+	if err != nil {
+		t.Fatalf("expected resolved dry-run to succeed, output:\n%s", output)
+	}
+	var complete struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Plan struct {
+				PaymentDetails paymentDetailsJSON `json:"payment_details"`
+				EPC            struct {
+					Payload string `json:"payload"`
+				} `json:"epc"`
+			} `json:"plan"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(output, &complete); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if !complete.Success || complete.Error != nil {
+		t.Fatalf("expected success envelope, got:\n%s", output)
+	}
+	if complete.Data.Plan.PaymentDetails.Payee != "Ecopower cv" || complete.Data.Plan.PaymentDetails.Amount != "87.65" ||
+		complete.Data.Plan.PaymentDetails.Reference.Kind != string(invoiceqr.StructuredReference) {
+		t.Fatalf("unexpected resolved plan: %+v", complete.Data.Plan.PaymentDetails)
+	}
+	if !strings.Contains(complete.Data.Plan.EPC.Payload, "Ecopower cv\nBE68539007547034\nEUR87.65") {
+		t.Fatalf("expected resolved EPC payload, got %q", complete.Data.Plan.EPC.Payload)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
+	}
+}
+
 func TestFromTextDryRunWithoutJSONFailsBeforeReadingInput(t *testing.T) {
 	err := FromTextCmd{
 		File:                  filepath.Join(t.TempDir(), "missing.txt"),
@@ -1858,6 +1967,41 @@ IBAN: BE68 5390 0754 7034
 Amount: EUR 42.50
 Reference: INV-2026-001
 `
+}
+
+func ecopowerInvoiceText() string {
+	return `Afrekening elektriciteit
+
+Gelieve het bedrag te betalen met onderstaande gegevens.
+Bedrag van deze afrekening
+€ 87,65
+
+Mededeling voor uw betaling
++++123/4567/89002+++
+
+Ecopower cv - Posthoflei 3 bus 3 - 2600 Berchem - BE 0478.948.294 - IBAN BE68 5390 0754 7034
+`
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func observedLineContains(lines []struct {
+	Kind string `json:"kind"`
+	Text string `json:"text"`
+}, kind string, text string) bool {
+	for _, line := range lines {
+		if line.Kind == kind && strings.Contains(line.Text, text) {
+			return true
+		}
+	}
+	return false
 }
 
 func setStdin(t *testing.T, input string) {

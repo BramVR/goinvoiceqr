@@ -557,7 +557,7 @@ func writeInvoicePDF(t *testing.T, path string, lines []string) {
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", content.Len(), content.String()),
+		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", content.Len(), content.String()),
 	}
 
 	var pdf bytes.Buffer

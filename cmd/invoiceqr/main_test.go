@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -387,6 +389,32 @@ func TestFromPDFInvokesPdftotextAndWritesAfterConfirmation(t *testing.T) {
 	assertSVGOutput(t, out)
 }
 
+func TestFromPDFExtractsGeneratedInvoicePDFAndWritesAfterConfirmation(t *testing.T) {
+	if _, err := exec.LookPath("pdftotext"); err != nil {
+		t.Skip("pdftotext not installed")
+	}
+
+	dir := t.TempDir()
+	pdf := filepath.Join(dir, "invoice.pdf")
+	out := filepath.Join(dir, "invoice.svg")
+	writeInvoicePDF(t, pdf, []string{
+		"Payee: ACME BV",
+		"IBAN: BE68 5390 0754 7034",
+		"Amount: EUR 42.50",
+		"Reference: INV-2026-001",
+	})
+	setStdin(t, "yes\n")
+
+	cmd := FromPDFCmd{
+		PDF:           pdf,
+		QROutputFlags: QROutputFlags{Out: out},
+	}
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("expected generated PDF extraction to succeed, got %v", err)
+	}
+	assertSVGOutput(t, out)
+}
+
 func TestFromPDFMissingPdftotextReportsInstallHelp(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "invoice.svg")
 	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
@@ -509,6 +537,54 @@ func assertSVGOutput(t *testing.T, path string) {
 	if !strings.Contains(string(data), "<svg") {
 		t.Fatalf("expected SVG output, got %q", data[:min(len(data), 120)])
 	}
+}
+
+func writeInvoicePDF(t *testing.T, path string, lines []string) {
+	t.Helper()
+
+	var content bytes.Buffer
+	content.WriteString("BT\n/F1 12 Tf\n16 TL\n72 720 Td\n")
+	for i, line := range lines {
+		if i > 0 {
+			content.WriteString("T*\n")
+		}
+		fmt.Fprintf(&content, "(%s) Tj\n", escapePDFText(line))
+	}
+	content.WriteString("ET\n")
+
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", content.Len(), content.String()),
+	}
+
+	var pdf bytes.Buffer
+	pdf.WriteString("%PDF-1.4\n")
+	offsets := make([]int, 0, len(objects)+1)
+	offsets = append(offsets, 0)
+	for index, object := range objects {
+		offsets = append(offsets, pdf.Len())
+		fmt.Fprintf(&pdf, "%d 0 obj\n%s\nendobj\n", index+1, object)
+	}
+	xrefOffset := pdf.Len()
+	fmt.Fprintf(&pdf, "xref\n0 %d\n", len(objects)+1)
+	pdf.WriteString("0000000000 65535 f \n")
+	for _, offset := range offsets[1:] {
+		fmt.Fprintf(&pdf, "%010d 00000 n \n", offset)
+	}
+	fmt.Fprintf(&pdf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xrefOffset)
+
+	if err := os.WriteFile(path, pdf.Bytes(), 0o644); err != nil {
+		t.Fatalf("write PDF: %v", err)
+	}
+}
+
+func escapePDFText(text string) string {
+	text = strings.ReplaceAll(text, `\`, `\\`)
+	text = strings.ReplaceAll(text, "(", `\(`)
+	return strings.ReplaceAll(text, ")", `\)`)
 }
 
 func clearInvoiceText() string {

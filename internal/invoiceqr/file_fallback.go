@@ -8,6 +8,8 @@ import (
 )
 
 func openForceWriteFile(path string) (*os.File, error) {
+	// Fallback targets lack a standard-library no-following open. Keep the
+	// symlink refusal behavior, but Unix and Windows provide the hard guarantee.
 	info, err := os.Lstat(path)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err

@@ -475,7 +475,7 @@ func TestFromPDFRejectsYesFlag(t *testing.T) {
 
 func TestConfirmationReturnsReadErrors(t *testing.T) {
 	readErr := errors.New("terminal read failed")
-	confirmed, err := confirmPaymentDetailsWithInput(validConfirmationDetails(), failingReader{
+	confirmed, err := confirmPaymentDetailsWithInput(validConfirmationDetails(), &failingReader{
 		data: []byte("yes"),
 		err:  readErr,
 	})
@@ -568,10 +568,10 @@ type failingReader struct {
 	done bool
 }
 
-func (reader failingReader) Read(p []byte) (int, error) {
+func (reader *failingReader) Read(p []byte) (int, error) {
 	if reader.done {
 		return 0, io.EOF
 	}
-	copy(p, reader.data)
-	return len(reader.data), reader.err
+	reader.done = true
+	return copy(p, reader.data), reader.err
 }

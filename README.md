@@ -74,7 +74,7 @@ go run ./cmd/invoiceqr from-text invoice.txt --amount 42.50 --reference INV-2026
 
 `--out` is required for QR generation. The file extension selects the output format when it is `.svg` or `.png`; otherwise pass `--format svg` or `--format png`.
 
-Existing output files are refused by default to avoid accidental replacement. Pass `--force` to overwrite an existing QR artifact. Symlink output paths are refused even with `--force`.
+Existing output files are refused by default to avoid accidental replacement. Pass `--force` to overwrite an existing QR artifact. On Unix and Windows targets, symlink output paths are refused even with `--force`.
 
 ## PDF Extraction
 

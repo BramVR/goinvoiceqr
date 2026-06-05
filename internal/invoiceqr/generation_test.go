@@ -195,6 +195,42 @@ func TestGeneratePaymentArtifactPreflightsForceSymlinkBeforeConfirmation(t *test
 	}
 }
 
+func TestGeneratePaymentArtifactPreflightsSymlinkBeforeConfirmation(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.svg")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(target, []byte("target"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	symlinkOrSkip(t, target, out)
+	confirmCalled := false
+
+	err := GeneratePaymentArtifact(
+		PaymentGenerationOptions{
+			Details: validManualPaymentDetails(),
+			Output:  QROutputOptions{Out: out},
+		},
+		func(ValidatedPaymentDetails) (bool, error) {
+			confirmCalled = true
+			return true, nil
+		},
+	)
+
+	if err == nil {
+		t.Fatalf("expected symlink output error")
+	}
+	lower := strings.ToLower(err.Error())
+	if !strings.Contains(lower, "symlink") {
+		t.Fatalf("expected symlink error, got %v", err)
+	}
+	if strings.Contains(lower, "force") {
+		t.Fatalf("expected symlink error without force suggestion, got %v", err)
+	}
+	if confirmCalled {
+		t.Fatalf("expected output preflight before confirmation")
+	}
+}
+
 func TestGeneratePaymentArtifactYesSkipsConfirmationAndWrites(t *testing.T) {
 	var gotPayload string
 	var gotOutput QROutputPreflight

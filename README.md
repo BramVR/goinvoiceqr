@@ -1,6 +1,6 @@
 # invoiceqr
 
-![goinvoiceqr hero showing Belgian SEPA/EPC invoice payment QR generation](docs/assets/goinvoiceqr-hero.png)
+![goinvoiceqr hero showing Belgian SEPA/EPC invoice payment QR generation](docs/assets/goinvoiceqr-hero.webp)
 
 [![Go](https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![CLI](https://img.shields.io/badge/CLI-Kong-111827)](https://github.com/alecthomas/kong)

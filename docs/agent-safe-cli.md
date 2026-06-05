@@ -64,7 +64,7 @@ If a field is ambiguous or missing, supply an explicit override and inspect the 
 go run ./cmd/invoiceqr from-text invoice.txt --amount 42.50 --reference INV-2026-001 --out invoice.svg --dry-run --json
 ```
 
-Show the Suggested Payment Details, evidence, Remittance Reference, and any Payment Artifact Plan to the user. To write a QR artifact from the suggestion path, run the non-dry-run command and require the user to approve the displayed Confirmed Payment Details at the prompt:
+Show the Suggested Payment Details, evidence, Remittance Reference, and any Payment Artifact Plan to the user. To write a QR artifact from the suggestion path, run the non-dry-run command and require the user to approve the displayed Payment Details at the prompt; after approval, those become Confirmed Payment Details for generation:
 
 ```sh
 go run ./cmd/invoiceqr from-text invoice.txt --out invoice.svg

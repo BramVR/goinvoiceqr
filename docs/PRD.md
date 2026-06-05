@@ -59,6 +59,8 @@ The tool supports manual input, validation-only checks, copied invoice text, and
 
 16. As a maintainer, I want PDF/OCR/AI extraction outside the trusted path, so that future helpers can improve suggestions without weakening payment generation safety.
 
+17. As a Calling Agent, I want dry-run JSON to include Agent Context, so that I can inspect incomplete or ambiguous Suggested Payment Details and supply explicit overrides without requiring `invoiceqr` to call an AI provider.
+
 ## Implementation Decisions
 
 - Build a Go CLI binary named `invoiceqr`.
@@ -108,6 +110,12 @@ The tool supports manual input, validation-only checks, copied invoice text, and
 - Deepen extraction into a Suggestion module. Its interface accepts text plus explicit flag overrides and returns either Suggested Payment Details or field-specific ambiguity and missing-field errors.
 
 - Treat `from-text`, `from-pdf`, and future OCR/LLM helpers as suggestion adapters. Each adapter may produce text or candidate fields, but none may produce Confirmed Payment Details or bypass confirmation.
+
+- Keep `invoiceqr` model-agnostic. Do not embed AI provider calls, subscription-backed model calls, or local model orchestration in the CLI; expose Agent Context so a Calling Agent outside the CLI can interpret invoice text and provide explicit overrides.
+
+- Include Agent Context in `from-text` and `from-pdf` dry-run JSON. Agent Context includes typed candidates with evidence, observed source lines with coarse kinds and extracted-text line numbers, and a source text hash by default. Full extracted text is explicit opt-in.
+
+- Allow incomplete suggestion dry-runs to return partial data with `success: false`, a recoverable `incomplete_suggestion` error, missing or ambiguous field lists, partial suggestions, candidates, and Agent Context. Do not include a Payment Artifact Plan unless all required Payment Details validate.
 
 - Use `pdftotext` as the v1 PDF adapter and stream extracted text through the Suggestion module rather than writing trusted intermediate files.
 
@@ -173,7 +181,9 @@ The tool supports manual input, validation-only checks, copied invoice text, and
 
 - OCR.
 
-- LLM or AI-based extraction.
+- Built-in LLM or AI provider calls inside `invoiceqr`.
+
+- Subscription-backed extraction through Codex, Claude, ChatGPT, or other model products inside `invoiceqr`.
 
 - Python extraction helpers.
 

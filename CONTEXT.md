@@ -24,6 +24,14 @@ _Avoid_: Payment plan, dry-run result
 Payment details supplied field-by-field by the caller instead of inferred from document text.
 _Avoid_: Raw CLI args
 
+**Calling Agent**:
+A user, script, or model outside `invoiceqr` that inspects Suggested Payment Details and may supply Manual Payment Details overrides.
+_Avoid_: Built-in AI, parser brain
+
+**Agent Context**:
+Bounded source text and candidate evidence exposed to a Calling Agent so it can inspect, challenge, or override Suggested Payment Details.
+_Avoid_: Prompt, raw invoice dump
+
 **Remittance Reference**:
 The payment communication carried with the transfer, either a Belgian structured reference or unstructured remittance information.
 _Avoid_: Message, note, description
@@ -49,6 +57,15 @@ Domain expert: "Treat it as unstructured remittance information. Do not also set
 
 Dev: "`generate --yes` skips the prompt after validating manual payment details."
 Domain expert: "That is fine for manual payment details. Suggested payment details still need explicit confirmation."
+
+Dev: "The calling agent inferred a missing payee from extracted invoice text."
+Domain expert: "Pass that value back as manual payment details or an override. The CLI still validates and asks for confirmation."
+
+Dev: "The agent context contains the invoice payment paragraph."
+Domain expert: "Use it to explain or override suggested payment details, not as confirmation."
+
+Dev: "The agent context includes the same amount as the Payment Artifact Plan."
+Domain expert: "That still is not approval. Only Confirmed Payment Details may produce a QR code."
 
 Dev: "The reference looks like `+++123/1234/12345+++` but the checksum is wrong."
 Domain expert: "Reject it. Do not silently downgrade a malformed Belgian structured reference to unstructured remittance information."

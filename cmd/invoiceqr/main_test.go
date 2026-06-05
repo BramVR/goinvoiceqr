@@ -1139,6 +1139,34 @@ func TestFromTextDryRunJSONInvalidCompleteSuggestionOmitsEPCPayload(t *testing.T
 	}
 }
 
+func TestFromTextDryRunWithoutJSONFailsBeforeReadingInput(t *testing.T) {
+	err := FromTextCmd{
+		File:   filepath.Join(t.TempDir(), "missing.txt"),
+		DryRun: true,
+	}.Run()
+
+	if err == nil {
+		t.Fatalf("expected dry-run/json flag error")
+	}
+	if !strings.Contains(err.Error(), "dry-run") || !strings.Contains(err.Error(), "--json") {
+		t.Fatalf("expected dry-run JSON error, got %v", err)
+	}
+}
+
+func TestFromTextJSONWithoutDryRunFailsBeforeReadingInput(t *testing.T) {
+	err := FromTextCmd{
+		File: filepath.Join(t.TempDir(), "missing.txt"),
+		JSON: true,
+	}.Run()
+
+	if err == nil {
+		t.Fatalf("expected json/dry-run flag error")
+	}
+	if !strings.Contains(err.Error(), "json") || !strings.Contains(err.Error(), "--dry-run") {
+		t.Fatalf("expected JSON dry-run error, got %v", err)
+	}
+}
+
 func TestFromTextStdinUsesOverridesAndTerminalConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")
@@ -1324,6 +1352,52 @@ func TestFromPDFDryRunJSONUsesExtractedTextEvidence(t *testing.T) {
 	}
 	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromPDFDryRunWithoutJSONFailsBeforeExtraction(t *testing.T) {
+	called := false
+	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
+		called = true
+		return []byte(clearInvoiceText()), nil
+	})
+
+	err := FromPDFCmd{
+		PDF:    "invoice.pdf",
+		DryRun: true,
+	}.Run()
+
+	if err == nil {
+		t.Fatalf("expected dry-run/json flag error")
+	}
+	if called {
+		t.Fatalf("expected no PDF extraction before flag validation")
+	}
+	if !strings.Contains(err.Error(), "dry-run") || !strings.Contains(err.Error(), "--json") {
+		t.Fatalf("expected dry-run JSON error, got %v", err)
+	}
+}
+
+func TestFromPDFJSONWithoutDryRunFailsBeforeExtraction(t *testing.T) {
+	called := false
+	withPDFTextCommandRunner(t, func(string, ...string) ([]byte, error) {
+		called = true
+		return []byte(clearInvoiceText()), nil
+	})
+
+	err := FromPDFCmd{
+		PDF:  "invoice.pdf",
+		JSON: true,
+	}.Run()
+
+	if err == nil {
+		t.Fatalf("expected json/dry-run flag error")
+	}
+	if called {
+		t.Fatalf("expected no PDF extraction before flag validation")
+	}
+	if !strings.Contains(err.Error(), "json") || !strings.Contains(err.Error(), "--dry-run") {
+		t.Fatalf("expected JSON dry-run error, got %v", err)
 	}
 }
 

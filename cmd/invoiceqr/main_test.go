@@ -457,6 +457,35 @@ func TestGenerateDryRunJSONUnknownExtensionPrintsErrorEnvelopeAndDoesNotWrite(t 
 	}
 }
 
+func TestGenerateDryRunJSONMissingParentPrintsErrorEnvelopeAndDoesNotWrite(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "missing", "invoice.svg")
+	cmd := exec.Command(binary, "generate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547034",
+		"--amount", "42.50",
+		"--reference", "INV-1",
+		"--out", out,
+		"--dry-run",
+		"--json",
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected dry-run missing parent failure")
+	}
+	assertGenerateDryRunJSONError(t, stdout.Bytes(), "generation_error", "out", "parent directory")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
+	}
+}
+
 func TestGeneratePromptsAndWritesAfterConfirmation(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "invoice.svg")
 	cmd := exec.Command("go", "run", ".", "generate",

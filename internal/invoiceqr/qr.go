@@ -105,6 +105,10 @@ func preflightQROutput(options QROutputOptions, stat qrPathStatusFunc) (QROutput
 		return QROutputPreflight{}, err
 	}
 
+	if err := ensureQROutputParent(out); err != nil {
+		return QROutputPreflight{}, err
+	}
+
 	status, err := stat(out)
 	if err != nil {
 		return QROutputPreflight{}, fmt.Errorf("out: %w", err)
@@ -124,6 +128,21 @@ func preflightQROutput(options QROutputOptions, stat qrPathStatusFunc) (QROutput
 		IsSymlink:     status.IsSymlink,
 		WillOverwrite: status.Exists && options.Force,
 	}, nil
+}
+
+func ensureQROutputParent(out string) error {
+	parent := filepath.Dir(out)
+	if parent == "." || parent == "" {
+		return nil
+	}
+	info, err := os.Stat(parent)
+	if err != nil {
+		return fmt.Errorf("out: parent directory: %w", err)
+	}
+	if !info.IsDir() {
+		return errors.New("out: parent directory is not a directory")
+	}
+	return nil
 }
 
 func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFunc, write qrWriteFunc, stat qrPathStatusFunc) error {

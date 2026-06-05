@@ -29,6 +29,7 @@ type QROutputPreflight struct {
 	Format        QRFormat
 	Force         bool
 	Exists        bool
+	IsSymlink     bool
 	WillOverwrite bool
 }
 
@@ -75,7 +76,7 @@ func qrCodeImgConfig(format QRFormat) *goqr.QrCodeImgConfig {
 }
 
 func WriteQRArtifact(payload string, options QROutputOptions) error {
-	return writeQRArtifact(payload, options, RenderQRCode, writeFile, pathExists)
+	return writeQRArtifact(payload, options, RenderQRCode, writeFile, pathStatus)
 }
 
 func WritePlannedQRArtifact(payload string, output QROutputPreflight) error {
@@ -83,14 +84,18 @@ func WritePlannedQRArtifact(payload string, output QROutputPreflight) error {
 }
 
 func PreflightQROutput(options QROutputOptions) (QROutputPreflight, error) {
-	return preflightQROutput(options, pathExists)
+	return preflightQROutput(options, pathStatus)
 }
 
 type qrRenderFunc func(string, QRFormat) ([]byte, error)
 type qrWriteFunc func(string, []byte, bool) error
-type qrExistsFunc func(string) (bool, error)
+type qrPathStatus struct {
+	Exists    bool
+	IsSymlink bool
+}
+type qrPathStatusFunc func(string) (qrPathStatus, error)
 
-func preflightQROutput(options QROutputOptions, exists qrExistsFunc) (QROutputPreflight, error) {
+func preflightQROutput(options QROutputOptions, stat qrPathStatusFunc) (QROutputPreflight, error) {
 	out := strings.TrimSpace(options.Out)
 	if out == "" {
 		return QROutputPreflight{}, errors.New("out: required")
@@ -100,25 +105,29 @@ func preflightQROutput(options QROutputOptions, exists qrExistsFunc) (QROutputPr
 		return QROutputPreflight{}, err
 	}
 
-	found, err := exists(out)
+	status, err := stat(out)
 	if err != nil {
 		return QROutputPreflight{}, fmt.Errorf("out: %w", err)
 	}
-	if found && !options.Force {
+	if status.Exists && !options.Force {
 		return QROutputPreflight{}, errors.New("out: already exists; use --force to overwrite")
+	}
+	if status.IsSymlink {
+		return QROutputPreflight{}, errors.New("out: already exists as symlink; refusing to overwrite")
 	}
 
 	return QROutputPreflight{
 		Path:          out,
 		Format:        format,
 		Force:         options.Force,
-		Exists:        found,
-		WillOverwrite: found && options.Force,
+		Exists:        status.Exists,
+		IsSymlink:     status.IsSymlink,
+		WillOverwrite: status.Exists && options.Force,
 	}, nil
 }
 
-func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFunc, write qrWriteFunc, exists qrExistsFunc) error {
-	preflight, err := preflightQROutput(options, exists)
+func writeQRArtifact(payload string, options QROutputOptions, render qrRenderFunc, write qrWriteFunc, stat qrPathStatusFunc) error {
+	preflight, err := preflightQROutput(options, stat)
 	if err != nil {
 		return err
 	}
@@ -191,13 +200,16 @@ func writeAllAndClose(file *os.File, data []byte) error {
 	return file.Close()
 }
 
-func pathExists(path string) (bool, error) {
-	_, err := os.Lstat(path)
+func pathStatus(path string) (qrPathStatus, error) {
+	info, err := os.Lstat(path)
 	if err == nil {
-		return true, nil
+		return qrPathStatus{
+			Exists:    true,
+			IsSymlink: info.Mode()&os.ModeSymlink != 0,
+		}, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return qrPathStatus{}, nil
 	}
-	return false, err
+	return qrPathStatus{}, err
 }

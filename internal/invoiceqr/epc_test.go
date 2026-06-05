@@ -74,6 +74,28 @@ func TestBuildEPCPayloadWithUnstructuredReferenceAndBIC(t *testing.T) {
 	}
 }
 
+func TestBuildEPCPayloadDataReturnsPayloadAndMetadata(t *testing.T) {
+	data, err := BuildEPCPayloadData(ConfirmedPaymentDetails{
+		Payee:  "ACME BV",
+		IBAN:   "BE68539007547034",
+		Amount: "42.50",
+		Reference: RemittanceReference{
+			Kind:  UnstructuredReference,
+			Value: "INV-1",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("expected EPC payload data, got %v", err)
+	}
+	if data.ServiceTag != "BCD" || data.Version != "002" || data.CharacterSet != "1" || data.Identification != "SCT" || data.Currency != "EUR" {
+		t.Fatalf("unexpected EPC metadata: %+v", data)
+	}
+	if !strings.Contains(data.Payload, "BCD\n002\n1\nSCT") || !strings.Contains(data.Payload, "EUR42.50") || !strings.Contains(data.Payload, "INV-1") {
+		t.Fatalf("unexpected payload: %q", data.Payload)
+	}
+}
+
 func TestBuildEPCPayloadRejectsUnknownRemittanceKind(t *testing.T) {
 	_, err := BuildEPCPayload(ConfirmedPaymentDetails{
 		Payee:  "ACME BV",

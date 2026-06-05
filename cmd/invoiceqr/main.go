@@ -136,12 +136,23 @@ type FromTextCmd struct {
 	File                string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
+	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
+	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
 }
 
 func (cmd FromTextCmd) Run() error {
+	if err := validateSuggestionJSONFlags(cmd.DryRun, cmd.JSON); err != nil {
+		return err
+	}
 	text, err := readInvoiceText(cmd.File)
 	if err != nil {
+		if cmd.JSON {
+			return printJSONError("input_error", err)
+		}
 		return err
+	}
+	if cmd.DryRun {
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
 	}
 	confirm := confirmPaymentDetails
 	if cmd.File == "" {
@@ -157,8 +168,14 @@ func generateSuggestedPaymentArtifact(text string, overrides invoiceqr.PaymentDe
 	}
 	return invoiceqr.GeneratePaymentArtifact(
 		invoiceqr.PaymentGenerationOptions{
-			Details: suggestionPaymentDetails(suggestion),
-			Output:  output,
+			Details: invoiceqr.PaymentDetails{
+				Payee:     suggestion.Payee,
+				IBAN:      suggestion.IBAN,
+				Amount:    suggestion.Amount,
+				Reference: suggestion.Reference,
+				BIC:       suggestion.BIC,
+			},
+			Output: output,
 		},
 		confirm,
 	)
@@ -168,14 +185,54 @@ type FromPDFCmd struct {
 	PDF                 string `arg:"" help:"Invoice PDF path."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
+	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
+	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
 }
 
 func (cmd FromPDFCmd) Run() error {
-	text, err := extractPDFText(cmd.PDF, pdfTextCommandRunner)
-	if err != nil {
+	if err := validateSuggestionJSONFlags(cmd.DryRun, cmd.JSON); err != nil {
 		return err
 	}
+	text, err := extractPDFText(cmd.PDF, pdfTextCommandRunner)
+	if err != nil {
+		if cmd.JSON {
+			return printJSONError("extraction_error", err)
+		}
+		return err
+	}
+	if cmd.DryRun {
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
+	}
 	return generateSuggestedPaymentArtifact(text, cmd.paymentDetails(), cmd.qrOutputOptions(), confirmPaymentDetails)
+}
+
+func validateSuggestionJSONFlags(dryRun, json bool) error {
+	switch {
+	case dryRun && !json:
+		return errors.New("dry-run: requires --json")
+	case json && !dryRun:
+		return errors.New("json: requires --dry-run")
+	default:
+		return nil
+	}
+}
+
+func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions) error {
+	result, err := invoiceqr.BuildSuggestedPaymentArtifactPlan(invoiceqr.SuggestedPaymentArtifactPlanOptions{
+		Text:      text,
+		Overrides: overrides,
+		Output:    output,
+	})
+	if err != nil {
+		if !result.HasReport {
+			return printJSONError("suggestion_error", err)
+		}
+		if printErr := printJSONEnvelope(suggestionDryRunJSONData(result), newCLIErrorJSON("generation_error", err)); printErr != nil {
+			return printErr
+		}
+		return cliExitError{code: 1}
+	}
+	return printJSONSuccess(suggestionDryRunJSONData(result))
 }
 
 type commandRunner func(string, ...string) ([]byte, error)
@@ -275,16 +332,6 @@ func readInvoiceText(path string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
-}
-
-func suggestionPaymentDetails(details invoiceqr.SuggestedPaymentDetails) invoiceqr.PaymentDetails {
-	return invoiceqr.PaymentDetails{
-		Payee:     details.Payee,
-		IBAN:      details.IBAN,
-		Amount:    details.Amount,
-		Reference: details.Reference,
-		BIC:       details.BIC,
-	}
 }
 
 func main() {

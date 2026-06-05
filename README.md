@@ -18,7 +18,7 @@ The CLI implements payment-detail validation, deterministic EPC payload construc
 
 Text extraction, PDF extraction, OCR, and AI may suggest values only. They must not bypass validation, confirmation, or the trusted payment-generation path. `generate --yes` is intended for already-known manual details. Suggested details from `from-text` and `from-pdf` always require explicit confirmation before output.
 
-Agent and automation workflows should follow [agent-safe CLI usage](docs/agent-safe-cli.md) for JSON validation, no-write Payment Artifact Plans, suggestion evidence, and confirmation boundaries.
+Agent and automation workflows should follow [agent-safe CLI usage](docs/agent-safe-cli.md) for JSON validation, no-write Payment Artifact Plans, Agent Context recovery, full-text privacy tradeoffs, and confirmation boundaries.
 
 ## Build
 
@@ -90,7 +90,7 @@ Pass `--json` to `generate` to print a machine-readable artifact result after th
 
 Pass `--dry-run --json` to `generate` to validate manual payment details, build the EPC payload, and preflight QR output without prompting or writing a file.
 
-Pass `--dry-run --json` to `from-text` or `from-pdf` to print Suggested Payment Details with per-field source and evidence snippets. Complete valid suggestions also include the same no-write Payment Artifact Plan used by `generate --dry-run --json`.
+Pass `--dry-run --json` to `from-text` or `from-pdf` to print Suggested Payment Details with per-field source and evidence snippets plus compact Agent Context for incomplete or ambiguous recovery. Complete valid suggestions also include the same no-write Payment Artifact Plan used by `generate --dry-run --json`. Add `--full-text` only when the Calling Agent needs the whole extracted text; invoice text may contain personal, contract, or customer data.
 
 ## Output
 

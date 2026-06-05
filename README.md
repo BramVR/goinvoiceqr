@@ -18,6 +18,8 @@ The CLI implements payment-detail validation, deterministic EPC payload construc
 
 Text extraction, PDF extraction, OCR, and AI may suggest values only. They must not bypass validation, confirmation, or the trusted payment-generation path. `generate --yes` is intended for already-known manual details. Suggested details from `from-text` and `from-pdf` always require explicit confirmation before output.
 
+Agent and automation workflows should follow [agent-safe CLI usage](docs/agent-safe-cli.md) for JSON validation, no-write Payment Artifact Plans, suggestion evidence, and confirmation boundaries.
+
 ## Build
 
 ```sh

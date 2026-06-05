@@ -129,15 +129,22 @@ func parseQRFormat(input string) (QRFormat, error) {
 }
 
 func writeFile(path string, data []byte, force bool) error {
+	var (
+		file *os.File
+		err  error
+	)
 	if force {
-		return os.WriteFile(path, data, 0o644)
+		file, err = openForceWriteFile(path)
+	} else {
+		file, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	}
-
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return err
 	}
+	return writeAllAndClose(file, data)
+}
 
+func writeAllAndClose(file *os.File, data []byte) error {
 	written, err := file.Write(data)
 	if err != nil {
 		_ = file.Close()

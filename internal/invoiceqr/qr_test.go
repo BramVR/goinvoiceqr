@@ -7,6 +7,7 @@ import (
 	_ "image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -131,9 +132,7 @@ func TestWriteQRArtifactRefusesOverwrite(t *testing.T) {
 func TestWriteQRArtifactRefusesDanglingSymlinkOverwrite(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")
-	if err := os.Symlink(filepath.Join(dir, "missing-target.svg"), out); err != nil {
-		t.Fatalf("seed symlink: %v", err)
-	}
+	symlinkOrSkip(t, filepath.Join(dir, "missing-target.svg"), out)
 
 	err := WriteQRArtifact(sampleEPCPayload, QROutputOptions{Out: out})
 	if err == nil {
@@ -192,6 +191,28 @@ func TestWriteQRArtifactAllowsForceOverwrite(t *testing.T) {
 	}
 }
 
+func TestWriteQRArtifactRefusesForceSymlinkOverwrite(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.svg")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(target, []byte("target"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	symlinkOrSkip(t, target, out)
+
+	err := WriteQRArtifact(sampleEPCPayload, QROutputOptions{Out: out, Force: true})
+	if err == nil {
+		t.Fatalf("expected symlink overwrite error")
+	}
+	got, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read target: %v", readErr)
+	}
+	if string(got) != "target" {
+		t.Fatalf("expected symlink target to remain unchanged, got %q", got)
+	}
+}
+
 func TestWriteQRArtifactUsesFormatOverride(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.qr")
@@ -243,5 +264,16 @@ func TestWriteQRArtifactPropagatesWriteError(t *testing.T) {
 
 	if !errors.Is(err, writeErr) {
 		t.Fatalf("expected write error, got %v", err)
+	}
+}
+
+func symlinkOrSkip(t *testing.T, oldname, newname string) {
+	t.Helper()
+
+	if err := os.Symlink(oldname, newname); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink setup requires Windows symlink privileges: %v", err)
+		}
+		t.Fatalf("seed symlink: %v", err)
 	}
 }

@@ -193,6 +193,9 @@ Reference: INV-2026-001
 	if !strings.Contains(strings.ToLower(err.Error()), "iban") {
 		t.Fatalf("expected iban error, got %v", err)
 	}
+	if !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected required field wording, got %v", err)
+	}
 }
 
 func TestSuggestPaymentDetailsFromTextReportsAmbiguousIBANs(t *testing.T) {

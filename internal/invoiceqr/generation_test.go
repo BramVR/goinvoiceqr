@@ -258,6 +258,37 @@ func TestGeneratePaymentArtifactWritesFromPlannedOutput(t *testing.T) {
 	}
 }
 
+func TestGeneratePaymentArtifactWithResultReturnsPlanAndArtifactMetadata(t *testing.T) {
+	result, err := generatePaymentArtifactWithResult(
+		PaymentGenerationOptions{
+			Details:          validManualPaymentDetails(),
+			Output:           QROutputOptions{Out: "invoice.qr", Format: "svg"},
+			SkipConfirmation: true,
+		},
+		nil,
+		func(payload string, output QROutputPreflight) (QRArtifactWriteResult, error) {
+			if !strings.Contains(payload, "ACME BV") {
+				t.Fatalf("expected payload to contain payee, got %q", payload)
+			}
+			return QRArtifactWriteResult{
+				Path:      output.Path,
+				Format:    output.Format,
+				ByteCount: 123,
+			}, nil
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("expected generation result, got %v", err)
+	}
+	if result.Plan.Details.Payee != "ACME BV" || result.Plan.ReferenceKind != UnstructuredReference {
+		t.Fatalf("unexpected plan: %+v", result.Plan)
+	}
+	if result.Artifact.Path != "invoice.qr" || result.Artifact.Format != QRFormatSVG || result.Artifact.ByteCount != 123 {
+		t.Fatalf("unexpected artifact metadata: %+v", result.Artifact)
+	}
+}
+
 func TestGeneratePaymentArtifactOrdersConfirmationBeforeOutput(t *testing.T) {
 	events := []string{}
 

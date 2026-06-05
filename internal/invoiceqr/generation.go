@@ -23,11 +23,21 @@ type PaymentArtifactPlan struct {
 	Output        QROutputPreflight
 }
 
+type PaymentArtifactResult struct {
+	Plan     PaymentArtifactPlan
+	Artifact QRArtifactWriteResult
+}
+
 type PaymentConfirmationFunc func(ValidatedPaymentDetails) (bool, error)
 type QRArtifactWriteFunc func(string, QROutputPreflight) error
+type QRArtifactWriteResultFunc func(string, QROutputPreflight) (QRArtifactWriteResult, error)
 
 func GeneratePaymentArtifact(options PaymentGenerationOptions, confirm PaymentConfirmationFunc) error {
 	return generatePaymentArtifact(options, confirm, WritePlannedQRArtifact)
+}
+
+func GeneratePaymentArtifactWithResult(options PaymentGenerationOptions, confirm PaymentConfirmationFunc) (PaymentArtifactResult, error) {
+	return generatePaymentArtifactWithResult(options, confirm, WritePlannedQRArtifactWithResult)
 }
 
 func BuildPaymentArtifactPlan(options PaymentArtifactPlanOptions) (PaymentArtifactPlan, error) {
@@ -61,28 +71,49 @@ func buildPaymentArtifactPlan(options PaymentArtifactPlanOptions, preflight qrOu
 }
 
 func generatePaymentArtifact(options PaymentGenerationOptions, confirm PaymentConfirmationFunc, write QRArtifactWriteFunc) error {
+	_, err := generatePaymentArtifactWithResult(
+		options,
+		confirm,
+		func(payload string, output QROutputPreflight) (QRArtifactWriteResult, error) {
+			if err := write(payload, output); err != nil {
+				return QRArtifactWriteResult{}, err
+			}
+			return QRArtifactWriteResult{}, nil
+		},
+	)
+	return err
+}
+
+func generatePaymentArtifactWithResult(options PaymentGenerationOptions, confirm PaymentConfirmationFunc, write QRArtifactWriteResultFunc) (PaymentArtifactResult, error) {
 	plan, err := BuildPaymentArtifactPlan(PaymentArtifactPlanOptions{
 		Details: options.Details,
 		Output:  options.Output,
 	})
 	if err != nil {
-		return err
+		return PaymentArtifactResult{}, err
 	}
 
 	if !options.SkipConfirmation {
 		if confirm == nil {
-			return errors.New("confirmation: required")
+			return PaymentArtifactResult{}, errors.New("confirmation: required")
 		}
 		confirmed, err := confirm(plan.Details)
 		if err != nil {
-			return fmt.Errorf("confirmation: %w", err)
+			return PaymentArtifactResult{}, fmt.Errorf("confirmation: %w", err)
 		}
 		if !confirmed {
-			return errors.New("confirmation: refused")
+			return PaymentArtifactResult{}, errors.New("confirmation: refused")
 		}
 	}
 
-	return write(plan.EPC.Payload, plan.Output)
+	artifact, err := write(plan.EPC.Payload, plan.Output)
+	if err != nil {
+		return PaymentArtifactResult{}, err
+	}
+	return PaymentArtifactResult{
+		Plan:     plan,
+		Artifact: artifact,
+	}, nil
 }
 
 func confirmedPaymentDetails(details ValidatedPaymentDetails) ConfirmedPaymentDetails {

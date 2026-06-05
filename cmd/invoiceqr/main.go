@@ -92,29 +92,24 @@ func (cmd GenerateCmd) Run() error {
 }
 
 func (cmd GenerateCmd) runJSON() error {
-	plan, err := invoiceqr.BuildPaymentArtifactPlan(invoiceqr.PaymentArtifactPlanOptions{
-		Details: cmd.paymentDetails(),
-		Output:  cmd.qrOutputOptions(),
-	})
-	if err != nil {
-		return printJSONError("generation_error", err)
-	}
-
+	var confirm invoiceqr.PaymentConfirmationFunc
 	if !cmd.Yes {
-		confirmed, err := confirmPaymentDetailsWithInputOutput(plan.Details, os.Stdin, os.Stderr)
-		if err != nil {
-			return printJSONError("generation_error", fmt.Errorf("confirmation: %w", err))
-		}
-		if !confirmed {
-			return printJSONError("generation_error", errors.New("confirmation: refused"))
+		confirm = func(details invoiceqr.ValidatedPaymentDetails) (bool, error) {
+			return confirmPaymentDetailsWithInputOutput(details, os.Stdin, os.Stderr)
 		}
 	}
-
-	result, err := invoiceqr.WritePlannedQRArtifactWithResult(plan.EPC.Payload, plan.Output)
+	result, err := invoiceqr.GeneratePaymentArtifactWithResult(
+		invoiceqr.PaymentGenerationOptions{
+			Details:          cmd.paymentDetails(),
+			Output:           cmd.qrOutputOptions(),
+			SkipConfirmation: cmd.Yes,
+		},
+		confirm,
+	)
 	if err != nil {
 		return printJSONError("generation_error", err)
 	}
-	return printJSONSuccess(generateArtifactJSONData(plan, result))
+	return printJSONSuccess(generateArtifactJSONData(result.Plan, result.Artifact))
 }
 
 type ValidateCmd struct {

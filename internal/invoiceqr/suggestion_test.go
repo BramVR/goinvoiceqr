@@ -196,6 +196,33 @@ func TestSuggestPaymentDetailsReportIncludesAgentContext(t *testing.T) {
 	}
 }
 
+func TestSuggestPaymentDetailsReportIncludesPaymentInstructionCompounds(t *testing.T) {
+	text := strings.Join([]string{
+		"Payee: ACME BV",
+		"IBAN: BE68 5390 0754 7034",
+		"Amount: EUR 42.50",
+		"Reference: INV-2026-001",
+		"Payable on receipt",
+		"betalingsgegevens vindt u hieronder",
+	}, "\n")
+
+	report, err := SuggestPaymentDetailsReportFromText(text, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "payment_instruction",
+		Line: 5,
+		Text: "Payable on receipt",
+	})
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "payment_instruction",
+		Line: 6,
+		Text: "betalingsgegevens vindt u hieronder",
+	})
+}
+
 func TestAgentContextPayeeCandidateCleansLabeledIBANLine(t *testing.T) {
 	report, err := SuggestPaymentDetailsReportFromText(`
 Payee: ACME BV - Main street 1 - IBAN BE68 5390 0754 7034

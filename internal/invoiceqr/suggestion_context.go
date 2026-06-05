@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
+
 type AgentContext struct {
 	SourceTextHash string
 	FullText       string
@@ -87,13 +89,17 @@ func agentContextLineKind(lines []string, index int) string {
 		return "reference_context"
 	case amountDueLinePattern.MatchString(line) || amountLinePattern.MatchString(line) || len(findStandaloneCurrencyAmountCandidatesInLine(line)) > 0:
 		return "amount_context"
-	case strings.Contains(strings.ToLower(line), "pay"):
+	case paymentInstructionLine(line):
 		return "payment_instruction"
 	case index == lastNonEmptyLineIndex(lines):
 		return "document_footer"
 	default:
 		return ""
 	}
+}
+
+func paymentInstructionLine(line string) bool {
+	return paymentInstructionPattern.MatchString(line)
 }
 
 func firstNonEmptyLineIndex(lines []string) int {

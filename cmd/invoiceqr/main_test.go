@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -117,6 +118,94 @@ func TestValidatePrintsNormalizedPaymentDetails(t *testing.T) {
 		if !strings.Contains(string(output), want) {
 			t.Fatalf("expected output to contain %q, got:\n%s", want, output)
 		}
+	}
+}
+
+func TestValidateJSONPrintsNormalizedPaymentDetailsEnvelope(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "validate",
+		"--payee", " ACME BV ",
+		"--iban", "be68 5390 0754 7034",
+		"--amount", "42.5",
+		"--reference", "INV-2026-001",
+		"--bic", "gebabebb",
+		"--json",
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("expected validate JSON to succeed, output:\n%s", output)
+	}
+	if strings.Contains(string(output), "Payment Details") {
+		t.Fatalf("expected JSON-only stdout, got:\n%s", output)
+	}
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Payee     string `json:"payee"`
+			IBAN      string `json:"iban"`
+			Amount    string `json:"amount"`
+			BIC       string `json:"bic"`
+			Reference struct {
+				Value string `json:"value"`
+				Kind  string `json:"kind"`
+			} `json:"reference"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if !envelope.Success || envelope.Error != nil {
+		t.Fatalf("unexpected envelope: %+v", envelope)
+	}
+	if envelope.Data.Payee != "ACME BV" || envelope.Data.IBAN != "BE68539007547034" || envelope.Data.Amount != "42.50" {
+		t.Fatalf("unexpected normalized data: %+v", envelope.Data)
+	}
+	if envelope.Data.BIC != "GEBABEBB" {
+		t.Fatalf("unexpected BIC data: %+v", envelope.Data)
+	}
+	if envelope.Data.Reference.Value != "INV-2026-001" || envelope.Data.Reference.Kind != "unstructured" {
+		t.Fatalf("unexpected reference data: %+v", envelope.Data.Reference)
+	}
+}
+
+func TestValidateJSONPrintsFieldErrorEnvelope(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "validate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547035",
+		"--amount", "42.50",
+		"--reference", "INV-2026-001",
+		"--json",
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected validate JSON to fail")
+	}
+	if strings.Contains(stdout.String(), "Payment Details") {
+		t.Fatalf("expected JSON-only stdout, got:\n%s", stdout.String())
+	}
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    any  `json:"data"`
+		Error   struct {
+			Code    string `json:"code"`
+			Field   string `json:"field"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if envelope.Success || envelope.Data != nil {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
+	}
+	if envelope.Error.Code != "validation_error" || envelope.Error.Field != "iban" || !strings.Contains(envelope.Error.Message, "invalid checksum") {
+		t.Fatalf("unexpected error data: %+v", envelope.Error)
 	}
 }
 

@@ -78,6 +78,8 @@ go run ./cmd/invoiceqr from-text invoice.txt --amount 42.50 --reference INV-2026
 
 `validate` prints normalized payment details and field-specific validation errors. `generate` validates manual payment details, asks for confirmation unless `--yes` is supplied, and writes a QR artifact. `from-text` and `from-pdf` suggest payment details and always require confirmation before output.
 
+Pass `--json` to `validate` to print a machine-readable envelope with `success`, `data`, and `error` fields.
+
 ## Output
 
 `--out` is required for QR generation. The file extension selects the output format when it is `.svg` or `.png`; otherwise pass `--format svg` or `--format png`.

@@ -2,6 +2,7 @@ package invoiceqr
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -119,12 +120,68 @@ func suggestedField(text, name, override, value string) SuggestedPaymentField {
 
 func evidenceLine(text, name, value string) string {
 	value = strings.TrimSpace(value)
+	if name == "amount" {
+		return amountEvidenceLine(text, value)
+	}
 	for _, line := range strings.Split(text, "\n") {
 		if lineMatchesEvidence(line, name, value) {
 			return strings.TrimSpace(line)
 		}
 	}
 	return ""
+}
+
+func amountEvidenceLine(text, value string) string {
+	lines := strings.Split(text, "\n")
+	if line := amountEvidenceLineNearLines(lines, amountDueLinePattern, true, value); line != "" {
+		return line
+	}
+	return amountEvidenceLineNearLines(lines, amountLinePattern, false, value)
+}
+
+func amountEvidenceLineNearLines(lines []string, pattern *regexp.Regexp, allowNextLine bool, value string) string {
+	for index, line := range lines {
+		if !pattern.MatchString(line) {
+			continue
+		}
+		if allowNextLine {
+			if amountLineMatchesValue(line, findPreferredAmountCandidatesInLine(line), value) {
+				return strings.TrimSpace(line)
+			}
+			candidateLine, candidates := findStandaloneCurrencyAmountCandidateLine(lines, index)
+			if amountLineMatchesValue(candidateLine, candidates, value) {
+				return strings.TrimSpace(candidateLine)
+			}
+			continue
+		}
+		if amountLineMatchesValue(line, findAmountCandidatesInLine(line), value) {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
+func findStandaloneCurrencyAmountCandidateLine(lines []string, index int) (string, []string) {
+	for _, line := range lines[index+1:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		return line, findStandaloneCurrencyAmountCandidatesInLine(line)
+	}
+	return "", nil
+}
+
+func amountLineMatchesValue(line string, candidates []string, value string) bool {
+	if strings.TrimSpace(line) == "" {
+		return false
+	}
+	for _, candidate := range candidates {
+		normalized, err := normalizeSuggestedAmount(candidate)
+		if err == nil && normalized == value {
+			return true
+		}
+	}
+	return false
 }
 
 func lineMatchesEvidence(line, name, value string) bool {

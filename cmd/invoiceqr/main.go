@@ -75,12 +75,22 @@ func (cmd GenerateCmd) Run() error {
 
 type ValidateCmd struct {
 	PaymentDetailsFlags `embed:""`
+	JSON                bool `help:"Print a machine-readable JSON envelope."`
 }
 
 func (cmd ValidateCmd) Run() error {
 	details, err := invoiceqr.ValidatePaymentDetails(cmd.paymentDetails())
 	if err != nil {
+		if cmd.JSON {
+			if printErr := printJSONEnvelope(nil, newCLIErrorJSON("validation_error", err)); printErr != nil {
+				return printErr
+			}
+			return cliExitError{code: 1}
+		}
 		return err
+	}
+	if cmd.JSON {
+		return printJSONEnvelope(validateJSONData(details), nil)
 	}
 	printPaymentDetails(details)
 	return nil
@@ -235,5 +245,10 @@ func suggestionPaymentDetails(details invoiceqr.SuggestedPaymentDetails) invoice
 
 func main() {
 	ctx := kong.Parse(&CLI{}, kong.Name("invoiceqr"), kong.Description("Generate Belgian-compatible SEPA/EPC payment QR codes."))
-	ctx.FatalIfErrorf(ctx.Run())
+	err := ctx.Run()
+	var exitErr cliExitError
+	if errors.As(err, &exitErr) {
+		os.Exit(exitErr.code)
+	}
+	ctx.FatalIfErrorf(err)
 }

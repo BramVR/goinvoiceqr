@@ -36,7 +36,7 @@ Malformed grouped values are ignored as amount candidates rather than truncated.
 
 ## Payees
 
-Suggested payees prefer explicit labels such as `Payee:` or `Supplier:`. When an invoice footer combines the creditor name and `IBAN` on one line, the legal-entity name before the address and IBAN may be used as a conservative payee candidate.
+Suggested payees prefer explicit labels such as `Payee:` or `Supplier:`. When an invoice footer combines the creditor name and `IBAN` on one line, the legal-entity name before the address and IBAN may be used as a conservative payee candidate. This creditor-IBAN inference requires an `IBAN` marker followed by an IBAN-shaped value, strips leading creditor/payee labels, and scans dash-separated segments so footer prefixes are ignored without breaking hyphenated legal names.
 
 ## Stdin Confirmation
 

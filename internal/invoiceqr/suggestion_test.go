@@ -196,6 +196,25 @@ func TestSuggestPaymentDetailsReportIncludesAgentContext(t *testing.T) {
 	}
 }
 
+func TestAgentContextPayeeCandidateCleansLabeledIBANLine(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Payee: ACME BV - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	payeeCandidates := report.AgentContext.Candidates.Payee
+	if len(payeeCandidates) != 1 {
+		t.Fatalf("expected one payee candidate, got %+v", payeeCandidates)
+	}
+	if payeeCandidates[0].Value != "ACME BV" {
+		t.Fatalf("payee candidate = %q, want ACME BV", payeeCandidates[0].Value)
+	}
+}
+
 func TestBuildSuggestedPaymentArtifactPlanReturnsReportAndPlan(t *testing.T) {
 	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
 		Text: `

@@ -223,8 +223,12 @@ func agentContextPayeeCandidates(text string) []AgentContextCandidate {
 	candidates := []AgentContextCandidate{}
 	for index, line := range strings.Split(text, "\n") {
 		if match := payeeLinePattern.FindStringSubmatch(line); len(match) > 1 {
+			value := strings.TrimSpace(match[1])
+			if creditor, ok := findCreditorIBANLinePayee(line); ok {
+				value = creditor
+			}
 			candidates = appendUniqueAgentCandidate(candidates, AgentContextCandidate{
-				Value:    strings.TrimSpace(match[1]),
+				Value:    value,
 				Evidence: strings.TrimSpace(line),
 				Line:     index + 1,
 			})

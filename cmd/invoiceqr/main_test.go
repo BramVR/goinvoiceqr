@@ -1320,8 +1320,8 @@ func TestFromTextDryRunJSONInvalidCompleteSuggestionOmitsEPCPayload(t *testing.T
 
 func TestFromTextDryRunWithoutJSONFailsBeforeReadingInput(t *testing.T) {
 	err := FromTextCmd{
-		File:   filepath.Join(t.TempDir(), "missing.txt"),
-		DryRun: true,
+		File:                  filepath.Join(t.TempDir(), "missing.txt"),
+		SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true},
 	}.Run()
 
 	if err == nil {
@@ -1334,8 +1334,8 @@ func TestFromTextDryRunWithoutJSONFailsBeforeReadingInput(t *testing.T) {
 
 func TestFromTextJSONWithoutDryRunFailsBeforeReadingInput(t *testing.T) {
 	err := FromTextCmd{
-		File: filepath.Join(t.TempDir(), "missing.txt"),
-		JSON: true,
+		File:                  filepath.Join(t.TempDir(), "missing.txt"),
+		SuggestionDryRunFlags: SuggestionDryRunFlags{JSON: true},
 	}.Run()
 
 	if err == nil {
@@ -1503,10 +1503,9 @@ func TestFromPDFDryRunJSONUsesExtractedTextEvidence(t *testing.T) {
 
 	output := captureStdout(t, func() error {
 		return FromPDFCmd{
-			PDF:           "invoice.pdf",
-			QROutputFlags: QROutputFlags{Out: out},
-			DryRun:        true,
-			JSON:          true,
+			PDF:                   "invoice.pdf",
+			QROutputFlags:         QROutputFlags{Out: out},
+			SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true, JSON: true},
 		}.Run()
 	})
 
@@ -1566,11 +1565,9 @@ func TestFromPDFDryRunJSONFullTextOptInIncludesExtractedText(t *testing.T) {
 
 	output := captureStdout(t, func() error {
 		return FromPDFCmd{
-			PDF:           "invoice.pdf",
-			QROutputFlags: QROutputFlags{Out: out},
-			DryRun:        true,
-			JSON:          true,
-			FullText:      true,
+			PDF:                   "invoice.pdf",
+			QROutputFlags:         QROutputFlags{Out: out},
+			SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true, JSON: true, FullText: true},
 		}.Run()
 	})
 
@@ -1600,8 +1597,8 @@ func TestFromPDFDryRunWithoutJSONFailsBeforeExtraction(t *testing.T) {
 	})
 
 	err := FromPDFCmd{
-		PDF:    "invoice.pdf",
-		DryRun: true,
+		PDF:                   "invoice.pdf",
+		SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true},
 	}.Run()
 
 	if err == nil {
@@ -1623,8 +1620,8 @@ func TestFromPDFJSONWithoutDryRunFailsBeforeExtraction(t *testing.T) {
 	})
 
 	err := FromPDFCmd{
-		PDF:  "invoice.pdf",
-		JSON: true,
+		PDF:                   "invoice.pdf",
+		SuggestionDryRunFlags: SuggestionDryRunFlags{JSON: true},
 	}.Run()
 
 	if err == nil {
@@ -1645,10 +1642,9 @@ func TestFromPDFDryRunJSONExtractionFailurePrintsErrorEnvelope(t *testing.T) {
 
 	output, err := captureStdoutAndError(t, func() error {
 		return FromPDFCmd{
-			PDF:           "invoice.pdf",
-			QROutputFlags: QROutputFlags{Out: "invoice.svg"},
-			DryRun:        true,
-			JSON:          true,
+			PDF:                   "invoice.pdf",
+			QROutputFlags:         QROutputFlags{Out: "invoice.svg"},
+			SuggestionDryRunFlags: SuggestionDryRunFlags{DryRun: true, JSON: true},
 		}.Run()
 	})
 

@@ -133,12 +133,10 @@ func (cmd ValidateCmd) Run() error {
 }
 
 type FromTextCmd struct {
-	File                string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
-	PaymentDetailsFlags `embed:""`
-	QROutputFlags       `embed:""`
-	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
-	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
-	FullText            bool `help:"Include full extracted text in Agent Context JSON."`
+	File                  string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
+	PaymentDetailsFlags   `embed:""`
+	QROutputFlags         `embed:""`
+	SuggestionDryRunFlags `embed:""`
 }
 
 func (cmd FromTextCmd) Run() error {
@@ -183,12 +181,16 @@ func generateSuggestedPaymentArtifact(text string, overrides invoiceqr.PaymentDe
 }
 
 type FromPDFCmd struct {
-	PDF                 string `arg:"" help:"Invoice PDF path."`
-	PaymentDetailsFlags `embed:""`
-	QROutputFlags       `embed:""`
-	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
-	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
-	FullText            bool `help:"Include full extracted text in Agent Context JSON."`
+	PDF                   string `arg:"" help:"Invoice PDF path."`
+	PaymentDetailsFlags   `embed:""`
+	QROutputFlags         `embed:""`
+	SuggestionDryRunFlags `embed:""`
+}
+
+type SuggestionDryRunFlags struct {
+	DryRun   bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
+	JSON     bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
+	FullText bool `help:"Include full extracted text in Agent Context JSON."`
 }
 
 func (cmd FromPDFCmd) Run() error {

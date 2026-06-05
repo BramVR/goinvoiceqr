@@ -1,6 +1,8 @@
 package invoiceqr
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -125,6 +127,91 @@ Reference: INV-2026-001
 	}
 	if report.Amount.Evidence != "Amount: EUR 42.50" {
 		t.Fatalf("amount evidence = %q, want selected amount line", report.Amount.Evidence)
+	}
+}
+
+func TestSuggestPaymentDetailsReportIncludesAgentContext(t *testing.T) {
+	text := strings.Join([]string{
+		"Invoice INV-2026-001",
+		"Payee: ACME BV",
+		"IBAN: BE68 5390 0754 7034",
+		"IBAN duplicate BE68 5390 0754 7034",
+		"Total amount to pay",
+		"EUR 42.50",
+		"Structured message +++123/4567/89002+++",
+	}, "\n")
+
+	report, err := SuggestPaymentDetailsReportFromText(text, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	wantHash := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(text)))
+	if report.AgentContext.SourceTextHash != wantHash {
+		t.Fatalf("source hash = %q, want %q", report.AgentContext.SourceTextHash, wantHash)
+	}
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "document_header",
+		Line: 1,
+		Text: "Invoice INV-2026-001",
+	})
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "payee_context",
+		Line: 2,
+		Text: "Payee: ACME BV",
+	})
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "iban_context",
+		Line: 3,
+		Text: "IBAN: BE68 5390 0754 7034",
+	})
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "amount_context",
+		Line: 5,
+		Text: "Total amount to pay",
+	})
+	assertObservedLine(t, report.AgentContext.ObservedLines, AgentContextObservedLine{
+		Kind: "reference_context",
+		Line: 7,
+		Text: "Structured message +++123/4567/89002+++",
+	})
+
+	ibanCandidates := report.AgentContext.Candidates.IBAN
+	if len(ibanCandidates) != 1 {
+		t.Fatalf("expected deduped IBAN candidate, got %+v", ibanCandidates)
+	}
+	if ibanCandidates[0].Value != "BE68 5390 0754 7034" || ibanCandidates[0].Normalized != "BE68539007547034" ||
+		ibanCandidates[0].Evidence != "IBAN: BE68 5390 0754 7034" || ibanCandidates[0].Line != 3 {
+		t.Fatalf("unexpected IBAN candidate: %+v", ibanCandidates[0])
+	}
+	amountCandidates := report.AgentContext.Candidates.Amount
+	if len(amountCandidates) != 1 || amountCandidates[0].Value != "42.50" || amountCandidates[0].Normalized != "42.50" ||
+		amountCandidates[0].Evidence != "EUR 42.50" || amountCandidates[0].Line != 6 {
+		t.Fatalf("unexpected amount candidates: %+v", amountCandidates)
+	}
+	referenceCandidates := report.AgentContext.Candidates.Reference
+	if len(referenceCandidates) != 1 || referenceCandidates[0].Value != "+++123/4567/89002+++" ||
+		referenceCandidates[0].Kind != "structured" || referenceCandidates[0].Line != 7 {
+		t.Fatalf("unexpected reference candidates: %+v", referenceCandidates)
+	}
+}
+
+func TestAgentContextPayeeCandidateCleansLabeledIBANLine(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Payee: ACME BV - Main street 1 - IBAN BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	payeeCandidates := report.AgentContext.Candidates.Payee
+	if len(payeeCandidates) != 1 {
+		t.Fatalf("expected one payee candidate, got %+v", payeeCandidates)
+	}
+	if payeeCandidates[0].Value != "ACME BV" {
+		t.Fatalf("payee candidate = %q, want ACME BV", payeeCandidates[0].Value)
 	}
 }
 
@@ -680,4 +767,15 @@ func assertSuggestedPaymentDetails(t *testing.T, got SuggestedPaymentDetails, wa
 	if got.Reference != want.Reference {
 		t.Fatalf("reference = %q, want %q", got.Reference, want.Reference)
 	}
+}
+
+func assertObservedLine(t *testing.T, lines []AgentContextObservedLine, want AgentContextObservedLine) {
+	t.Helper()
+
+	for _, line := range lines {
+		if line == want {
+			return
+		}
+	}
+	t.Fatalf("missing observed line %+v in %+v", want, lines)
 }

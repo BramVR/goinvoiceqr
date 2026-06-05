@@ -21,12 +21,13 @@ type SuggestedPaymentField struct {
 }
 
 type SuggestedPaymentDetailsReport struct {
-	Payee     SuggestedPaymentField
-	IBAN      SuggestedPaymentField
-	Amount    SuggestedPaymentField
-	Reference SuggestedPaymentField
-	BIC       SuggestedPaymentField
-	Details   SuggestedPaymentDetails
+	Payee        SuggestedPaymentField
+	IBAN         SuggestedPaymentField
+	Amount       SuggestedPaymentField
+	Reference    SuggestedPaymentField
+	BIC          SuggestedPaymentField
+	AgentContext AgentContext
+	Details      SuggestedPaymentDetails
 }
 
 type SuggestedPaymentArtifactPlanOptions struct {
@@ -96,12 +97,13 @@ func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) 
 		BIC:       strings.TrimSpace(overrides.BIC),
 	}
 	return SuggestedPaymentDetailsReport{
-		Payee:     suggestedField(text, "payee", overrides.Payee, payee),
-		IBAN:      suggestedField(text, "iban", overrides.IBAN, iban),
-		Amount:    suggestedField(text, "amount", overrides.Amount, amount),
-		Reference: suggestedField(text, "reference", overrides.Reference, reference),
-		BIC:       suggestedField(text, "bic", overrides.BIC, details.BIC),
-		Details:   details,
+		Payee:        suggestedField(text, "payee", overrides.Payee, payee),
+		IBAN:         suggestedField(text, "iban", overrides.IBAN, iban),
+		Amount:       suggestedField(text, "amount", overrides.Amount, amount),
+		Reference:    suggestedField(text, "reference", overrides.Reference, reference),
+		BIC:          suggestedField(text, "bic", overrides.BIC, details.BIC),
+		AgentContext: buildAgentContext(text),
+		Details:      details,
 	}, nil
 }
 

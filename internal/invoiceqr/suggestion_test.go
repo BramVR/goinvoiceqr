@@ -238,6 +238,30 @@ Reference: INV-2026-001
 	if result.Plan.Details.IBAN != "BE68539007547034" || result.Plan.Output.Format != QRFormatSVG {
 		t.Fatalf("unexpected payment artifact plan: %+v", result.Plan)
 	}
+	if result.Report.AgentContext.FullText != "" {
+		t.Fatalf("expected compact Agent Context by default, got full text %q", result.Report.AgentContext.FullText)
+	}
+}
+
+func TestBuildSuggestedPaymentArtifactPlanIncludesFullTextWhenRequested(t *testing.T) {
+	text := `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text:            text,
+		Output:          QROutputOptions{Out: "invoice.qr", Format: "svg"},
+		IncludeFullText: true,
+	})
+
+	if err != nil {
+		t.Fatalf("expected suggested payment artifact plan, got %v", err)
+	}
+	if result.Report.AgentContext.FullText != text {
+		t.Fatalf("full text = %q, want %q", result.Report.AgentContext.FullText, text)
+	}
 }
 
 func TestBuildSuggestedPaymentArtifactPlanReturnsReportWithoutPlanForInvalidCompleteSuggestion(t *testing.T) {

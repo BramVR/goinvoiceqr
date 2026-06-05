@@ -9,6 +9,7 @@ import (
 
 type AgentContext struct {
 	SourceTextHash string
+	FullText       string
 	ObservedLines  []AgentContextObservedLine
 	Candidates     AgentContextCandidates
 }
@@ -34,9 +35,9 @@ type AgentContextCandidate struct {
 	Kind       string
 }
 
-func buildAgentContext(text string) AgentContext {
+func buildAgentContext(text string, includeFullText bool) AgentContext {
 	hash := sha256.Sum256([]byte(text))
-	return AgentContext{
+	context := AgentContext{
 		SourceTextHash: fmt.Sprintf("sha256:%x", hash),
 		ObservedLines:  agentContextObservedLines(text),
 		Candidates: AgentContextCandidates{
@@ -46,6 +47,10 @@ func buildAgentContext(text string) AgentContext {
 			Reference: agentContextReferenceCandidates(text),
 		},
 	}
+	if includeFullText {
+		context.FullText = text
+	}
+	return context
 }
 
 func agentContextObservedLines(text string) []AgentContextObservedLine {

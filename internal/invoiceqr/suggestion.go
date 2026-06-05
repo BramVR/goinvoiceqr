@@ -31,9 +31,10 @@ type SuggestedPaymentDetailsReport struct {
 }
 
 type SuggestedPaymentArtifactPlanOptions struct {
-	Text      string
-	Overrides PaymentDetails
-	Output    QROutputOptions
+	Text            string
+	Overrides       PaymentDetails
+	Output          QROutputOptions
+	IncludeFullText bool
 }
 
 type SuggestedPaymentArtifactPlan struct {
@@ -94,7 +95,7 @@ func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (Sugge
 }
 
 func BuildSuggestedPaymentArtifactPlan(options SuggestedPaymentArtifactPlanOptions) (SuggestedPaymentArtifactPlan, error) {
-	report, err := SuggestPaymentDetailsReportFromText(options.Text, options.Overrides)
+	report, err := suggestPaymentDetailsReportFromText(options.Text, options.Overrides, options.IncludeFullText)
 	if err != nil {
 		return SuggestedPaymentArtifactPlan{Report: report, HasReport: true}, err
 	}
@@ -114,6 +115,10 @@ func BuildSuggestedPaymentArtifactPlan(options SuggestedPaymentArtifactPlanOptio
 }
 
 func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetailsReport, error) {
+	return suggestPaymentDetailsReportFromText(text, overrides, false)
+}
+
+func suggestPaymentDetailsReportFromText(text string, overrides PaymentDetails, includeFullText bool) (SuggestedPaymentDetailsReport, error) {
 	issues := []SuggestionFieldIssue{}
 	payee, issue := chooseField("payee", overrides.Payee, findPayeeCandidates(text), false)
 	if issue != nil {
@@ -145,7 +150,7 @@ func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) 
 		Amount:       suggestedField(text, "amount", overrides.Amount, amount),
 		Reference:    suggestedField(text, "reference", overrides.Reference, reference),
 		BIC:          suggestedField(text, "bic", overrides.BIC, details.BIC),
-		AgentContext: buildAgentContext(text),
+		AgentContext: buildAgentContext(text, includeFullText),
 		Details:      details,
 	}
 	if len(issues) > 0 {

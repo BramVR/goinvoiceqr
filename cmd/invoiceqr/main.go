@@ -138,6 +138,7 @@ type FromTextCmd struct {
 	QROutputFlags       `embed:""`
 	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
 	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
+	FullText            bool `help:"Include full extracted text in Agent Context JSON."`
 }
 
 func (cmd FromTextCmd) Run() error {
@@ -152,7 +153,7 @@ func (cmd FromTextCmd) Run() error {
 		return err
 	}
 	if cmd.DryRun {
-		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions(), cmd.FullText)
 	}
 	confirm := confirmPaymentDetails
 	if cmd.File == "" {
@@ -187,6 +188,7 @@ type FromPDFCmd struct {
 	QROutputFlags       `embed:""`
 	DryRun              bool `help:"Suggest and preflight without prompting or writing. Requires --json."`
 	JSON                bool `help:"Print a machine-readable JSON envelope. Requires --dry-run."`
+	FullText            bool `help:"Include full extracted text in Agent Context JSON."`
 }
 
 func (cmd FromPDFCmd) Run() error {
@@ -201,7 +203,7 @@ func (cmd FromPDFCmd) Run() error {
 		return err
 	}
 	if cmd.DryRun {
-		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions(), cmd.FullText)
 	}
 	return generateSuggestedPaymentArtifact(text, cmd.paymentDetails(), cmd.qrOutputOptions(), confirmPaymentDetails)
 }
@@ -217,11 +219,12 @@ func validateSuggestionJSONFlags(dryRun, json bool) error {
 	}
 }
 
-func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions) error {
+func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions, includeFullText bool) error {
 	result, err := invoiceqr.BuildSuggestedPaymentArtifactPlan(invoiceqr.SuggestedPaymentArtifactPlanOptions{
-		Text:      text,
-		Overrides: overrides,
-		Output:    output,
+		Text:            text,
+		Overrides:       overrides,
+		Output:          output,
+		IncludeFullText: includeFullText,
 	})
 	if err != nil {
 		var incomplete invoiceqr.IncompleteSuggestionError

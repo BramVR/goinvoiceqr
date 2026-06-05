@@ -24,8 +24,16 @@ type paymentDetailsJSON struct {
 	Payee     string        `json:"payee"`
 	IBAN      string        `json:"iban"`
 	Amount    string        `json:"amount"`
-	BIC       string        `json:"bic"`
+	BIC       string        `json:"bic,omitempty"`
 	Reference referenceJSON `json:"reference"`
+}
+
+type cliExitError struct {
+	code int
+}
+
+func (err cliExitError) Error() string {
+	return "exit"
 }
 
 type referenceJSON struct {

@@ -85,6 +85,7 @@ func (cmd ValidateCmd) Run() error {
 			if printErr := printJSONEnvelope(nil, newCLIErrorJSON("validation_error", err)); printErr != nil {
 				return printErr
 			}
+			return cliExitError{code: 1}
 		}
 		return err
 	}
@@ -244,5 +245,10 @@ func suggestionPaymentDetails(details invoiceqr.SuggestedPaymentDetails) invoice
 
 func main() {
 	ctx := kong.Parse(&CLI{}, kong.Name("invoiceqr"), kong.Description("Generate Belgian-compatible SEPA/EPC payment QR codes."))
-	ctx.FatalIfErrorf(ctx.Run())
+	err := ctx.Run()
+	var exitErr cliExitError
+	if errors.As(err, &exitErr) {
+		os.Exit(exitErr.code)
+	}
+	ctx.FatalIfErrorf(err)
 }

@@ -170,7 +170,8 @@ func TestValidateJSONPrintsNormalizedPaymentDetailsEnvelope(t *testing.T) {
 }
 
 func TestValidateJSONPrintsFieldErrorEnvelope(t *testing.T) {
-	cmd := exec.Command("go", "run", ".", "validate",
+	binary := buildInvoiceqrCLI(t)
+	cmd := exec.Command(binary, "validate",
 		"--payee", "ACME BV",
 		"--iban", "BE68539007547035",
 		"--amount", "42.50",
@@ -201,11 +202,38 @@ func TestValidateJSONPrintsFieldErrorEnvelope(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
 		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
+	if stderr.String() != "" {
+		t.Fatalf("expected empty stderr in JSON mode, got:\n%s", stderr.String())
+	}
 	if envelope.Success || envelope.Data != nil {
 		t.Fatalf("unexpected error envelope: %+v", envelope)
 	}
 	if envelope.Error.Code != "validation_error" || envelope.Error.Field != "iban" || !strings.Contains(envelope.Error.Message, "invalid checksum") {
 		t.Fatalf("unexpected error data: %+v", envelope.Error)
+	}
+}
+
+func TestValidateJSONOmitsEmptyBIC(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "validate",
+		"--payee", "ACME BV",
+		"--iban", "BE68539007547034",
+		"--amount", "42.50",
+		"--reference", "INV-2026-001",
+		"--json",
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("expected validate JSON to succeed, output:\n%s", output)
+	}
+	var envelope struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if _, ok := envelope.Data["bic"]; ok {
+		t.Fatalf("expected empty BIC to be omitted, got:\n%s", output)
 	}
 }
 
@@ -703,6 +731,18 @@ func setStdin(t *testing.T, input string) {
 		os.Stdin = oldStdin
 		file.Close()
 	})
+}
+
+func buildInvoiceqrCLI(t *testing.T) string {
+	t.Helper()
+
+	binary := filepath.Join(t.TempDir(), "invoiceqr")
+	cmd := exec.Command("go", "build", "-o", binary, ".")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build invoiceqr: %v\n%s", err, output)
+	}
+	return binary
 }
 
 func withPDFTextCommandRunner(t *testing.T, runner commandRunner) {

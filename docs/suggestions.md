@@ -19,6 +19,7 @@ Read when changing `from-text`, `from-pdf`, suggestion parsing, amount parsing, 
 - The Suggestion module extracts candidates and reports required-field errors for missing details.
 - Explicit flags override suggested fields.
 - Multiple plausible IBANs or amounts are ambiguity errors unless flags resolve them.
+- Dry-run JSON reports each suggested field with `value`, `source`, and a short text evidence snippet. Explicit flags use `source: "override"` and do not get text evidence.
 - Suggested Payment Details are validated by the trusted payment-generation path.
 - Suggested details always require confirmation before writing a QR artifact.
 

@@ -13,30 +13,61 @@ type SuggestedPaymentDetails struct {
 	BIC       string
 }
 
+type SuggestedPaymentField struct {
+	Value    string
+	Source   string
+	Evidence string
+}
+
+type SuggestedPaymentDetailsReport struct {
+	Payee     SuggestedPaymentField
+	IBAN      SuggestedPaymentField
+	Amount    SuggestedPaymentField
+	Reference SuggestedPaymentField
+	BIC       SuggestedPaymentField
+	Details   SuggestedPaymentDetails
+}
+
 func SuggestPaymentDetailsFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetails, error) {
-	payee, err := chooseField("payee", overrides.Payee, findPayeeCandidates(text), false)
+	report, err := SuggestPaymentDetailsReportFromText(text, overrides)
 	if err != nil {
 		return SuggestedPaymentDetails{}, err
+	}
+	return report.Details, nil
+}
+
+func SuggestPaymentDetailsReportFromText(text string, overrides PaymentDetails) (SuggestedPaymentDetailsReport, error) {
+	payee, err := chooseField("payee", overrides.Payee, findPayeeCandidates(text), false)
+	if err != nil {
+		return SuggestedPaymentDetailsReport{}, err
 	}
 	iban, err := chooseField("iban", overrides.IBAN, findIBANCandidates(text), true)
 	if err != nil {
-		return SuggestedPaymentDetails{}, err
+		return SuggestedPaymentDetailsReport{}, err
 	}
 	amount, err := chooseField("amount", overrides.Amount, findAmountCandidates(text), true)
 	if err != nil {
-		return SuggestedPaymentDetails{}, err
+		return SuggestedPaymentDetailsReport{}, err
 	}
 	reference, err := chooseField("reference", overrides.Reference, findReferenceCandidates(text), false)
 	if err != nil {
-		return SuggestedPaymentDetails{}, err
+		return SuggestedPaymentDetailsReport{}, err
 	}
 
-	return SuggestedPaymentDetails{
+	details := SuggestedPaymentDetails{
 		Payee:     payee,
 		IBAN:      iban,
 		Amount:    amount,
 		Reference: reference,
 		BIC:       strings.TrimSpace(overrides.BIC),
+	}
+	return SuggestedPaymentDetailsReport{
+		Payee:     suggestedField(text, "payee", overrides.Payee, payee),
+		IBAN:      suggestedField(text, "iban", overrides.IBAN, iban),
+		Amount:    suggestedField(text, "amount", overrides.Amount, amount),
+		Reference: suggestedField(text, "reference", overrides.Reference, reference),
+		BIC:       suggestedField(text, "bic", overrides.BIC, details.BIC),
+		Details:   details,
 	}, nil
 }
 
@@ -67,4 +98,60 @@ func appendUnique(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func suggestedField(text, name, override, value string) SuggestedPaymentField {
+	if strings.TrimSpace(override) != "" {
+		return SuggestedPaymentField{
+			Value:  strings.TrimSpace(override),
+			Source: "override",
+		}
+	}
+	if value == "" {
+		return SuggestedPaymentField{}
+	}
+	return SuggestedPaymentField{
+		Value:    value,
+		Source:   "text",
+		Evidence: evidenceLine(text, name, value),
+	}
+}
+
+func evidenceLine(text, name, value string) string {
+	value = strings.TrimSpace(value)
+	for _, line := range strings.Split(text, "\n") {
+		if lineMatchesEvidence(line, name, value) {
+			return strings.TrimSpace(line)
+		}
+	}
+	return ""
+}
+
+func lineMatchesEvidence(line, name, value string) bool {
+	if strings.Contains(line, value) {
+		return true
+	}
+	switch name {
+	case "iban":
+		return strings.Contains(compactAlnumUpper(line), compactAlnumUpper(value))
+	case "amount":
+		candidates := append(findAmountCandidatesInLine(line), findStandaloneCurrencyAmountCandidatesInLine(line)...)
+		for _, candidate := range candidates {
+			normalized, err := normalizeSuggestedAmount(candidate)
+			if err == nil && normalized == value {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func compactAlnumUpper(input string) string {
+	var builder strings.Builder
+	for _, r := range input {
+		if r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
+			builder.WriteRune(r)
+		}
+	}
+	return strings.ToUpper(builder.String())
 }

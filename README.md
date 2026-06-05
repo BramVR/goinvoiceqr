@@ -64,12 +64,14 @@ Suggest payment details from copied invoice text:
 ```sh
 go run ./cmd/invoiceqr from-text invoice.txt --out invoice.svg
 pbpaste | go run ./cmd/invoiceqr from-text --out invoice.svg
+go run ./cmd/invoiceqr from-text invoice.txt --out invoice.svg --dry-run --json
 ```
 
 Suggest payment details from a PDF invoice:
 
 ```sh
 go run ./cmd/invoiceqr from-pdf invoice.pdf --out invoice.svg
+go run ./cmd/invoiceqr from-pdf invoice.pdf --out invoice.svg --dry-run --json
 ```
 
 Override a suggested field when the invoice text is ambiguous or incomplete:
@@ -85,6 +87,8 @@ Pass `--json` to `validate` to print a machine-readable envelope with `success`,
 Pass `--json` to `generate` to print a machine-readable artifact result after the QR file is written. When confirmation is required, payment details and the prompt are written to stderr so stdout remains parseable JSON.
 
 Pass `--dry-run --json` to `generate` to validate manual payment details, build the EPC payload, and preflight QR output without prompting or writing a file.
+
+Pass `--dry-run --json` to `from-text` or `from-pdf` to print Suggested Payment Details with per-field source and evidence snippets. Complete valid suggestions also include the same no-write Payment Artifact Plan used by `generate --dry-run --json`.
 
 ## Output
 

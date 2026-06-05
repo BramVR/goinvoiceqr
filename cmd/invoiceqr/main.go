@@ -136,12 +136,20 @@ type FromTextCmd struct {
 	File                string `arg:"" optional:"" help:"Invoice text file. Reads stdin when omitted."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
+	DryRun              bool `help:"Suggest and preflight without prompting or writing."`
+	JSON                bool `help:"Print a machine-readable JSON envelope."`
 }
 
 func (cmd FromTextCmd) Run() error {
 	text, err := readInvoiceText(cmd.File)
 	if err != nil {
 		return err
+	}
+	if cmd.DryRun {
+		if !cmd.JSON {
+			return errors.New("dry-run: requires --json")
+		}
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
 	}
 	confirm := confirmPaymentDetails
 	if cmd.File == "" {
@@ -168,6 +176,8 @@ type FromPDFCmd struct {
 	PDF                 string `arg:"" help:"Invoice PDF path."`
 	PaymentDetailsFlags `embed:""`
 	QROutputFlags       `embed:""`
+	DryRun              bool `help:"Suggest and preflight without prompting or writing."`
+	JSON                bool `help:"Print a machine-readable JSON envelope."`
 }
 
 func (cmd FromPDFCmd) Run() error {
@@ -175,7 +185,31 @@ func (cmd FromPDFCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	if cmd.DryRun {
+		if !cmd.JSON {
+			return errors.New("dry-run: requires --json")
+		}
+		return printSuggestionDryRunJSON(text, cmd.paymentDetails(), cmd.qrOutputOptions())
+	}
 	return generateSuggestedPaymentArtifact(text, cmd.paymentDetails(), cmd.qrOutputOptions(), confirmPaymentDetails)
+}
+
+func printSuggestionDryRunJSON(text string, overrides invoiceqr.PaymentDetails, output invoiceqr.QROutputOptions) error {
+	report, err := invoiceqr.SuggestPaymentDetailsReportFromText(text, overrides)
+	if err != nil {
+		return printJSONError("suggestion_error", err)
+	}
+	plan, err := invoiceqr.BuildPaymentArtifactPlan(invoiceqr.PaymentArtifactPlanOptions{
+		Details: suggestionPaymentDetails(report.Details),
+		Output:  output,
+	})
+	if err != nil {
+		if printErr := printJSONEnvelope(suggestionDryRunErrorJSONData(report), newCLIErrorJSON("generation_error", err)); printErr != nil {
+			return printErr
+		}
+		return cliExitError{code: 1}
+	}
+	return printJSONSuccess(suggestionDryRunJSONData(report, plan))
 }
 
 type commandRunner func(string, ...string) ([]byte, error)

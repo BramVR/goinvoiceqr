@@ -61,6 +61,8 @@ func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 				"--out=STRING",
 				"--format=STRING",
 				"--force",
+				"--dry-run",
+				"--json",
 			},
 		},
 		{
@@ -75,6 +77,8 @@ func TestCommandHelpExposesPaymentDetailsFlags(t *testing.T) {
 				"--out=STRING",
 				"--format=STRING",
 				"--force",
+				"--dry-run",
+				"--json",
 			},
 		},
 	}
@@ -296,6 +300,9 @@ func TestGenerateDryRunJSONPrintsPaymentArtifactPlanWithoutPromptOrWrite(t *test
 	}
 	if strings.Contains(string(output), "Write QR artifact") || strings.Contains(string(output), "Payment Details") {
 		t.Fatalf("expected JSON-only dry-run output, got:\n%s", output)
+	}
+	if strings.Contains(strings.ToLower(string(output)), "confidence") {
+		t.Fatalf("expected no AI confidence scores, got:\n%s", output)
 	}
 	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
@@ -832,6 +839,306 @@ func TestFromTextFilePromptsAndWritesAfterConfirmation(t *testing.T) {
 	assertSVGOutput(t, out)
 }
 
+func TestFromTextDryRunJSONPrintsSuggestionsWithEvidenceAndPlan(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "invoice.txt")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(input, []byte(clearInvoiceText()), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	cmd := exec.Command("go", "run", ".", "from-text", input, "--out", out, "--dry-run", "--json")
+	cmd.Stdin = strings.NewReader("yes\n")
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("expected from-text dry-run JSON to succeed, output:\n%s", output)
+	}
+	if strings.Contains(string(output), "Write QR artifact") || strings.Contains(string(output), "Payment Details") {
+		t.Fatalf("expected JSON-only dry-run output, got:\n%s", output)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
+	}
+
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				Payee struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"payee"`
+				IBAN struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"iban"`
+				Amount struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"amount"`
+				Reference struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"reference"`
+			} `json:"suggestions"`
+			Plan struct {
+				PaymentDetails paymentDetailsJSON `json:"payment_details"`
+				EPC            struct {
+					Payload string `json:"payload"`
+				} `json:"epc"`
+				Output struct {
+					Path   string `json:"path"`
+					Format string `json:"format"`
+				} `json:"output"`
+			} `json:"plan"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if !envelope.Success || envelope.Error != nil {
+		t.Fatalf("expected success envelope, got:\n%s", output)
+	}
+	if envelope.Data.Suggestions.Payee.Value != "ACME BV" || envelope.Data.Suggestions.Payee.Source != "text" {
+		t.Fatalf("unexpected payee suggestion: %+v", envelope.Data.Suggestions.Payee)
+	}
+	if !strings.Contains(envelope.Data.Suggestions.Payee.Evidence, "Payee: ACME BV") {
+		t.Fatalf("expected payee evidence, got %+v", envelope.Data.Suggestions.Payee)
+	}
+	if envelope.Data.Suggestions.IBAN.Value != "BE68 5390 0754 7034" || envelope.Data.Suggestions.IBAN.Source != "text" {
+		t.Fatalf("unexpected iban suggestion: %+v", envelope.Data.Suggestions.IBAN)
+	}
+	if !strings.Contains(envelope.Data.Suggestions.IBAN.Evidence, "IBAN: BE68 5390 0754 7034") {
+		t.Fatalf("expected iban evidence, got %+v", envelope.Data.Suggestions.IBAN)
+	}
+	if envelope.Data.Suggestions.Amount.Value != "42.50" || envelope.Data.Suggestions.Amount.Source != "text" {
+		t.Fatalf("unexpected amount suggestion: %+v", envelope.Data.Suggestions.Amount)
+	}
+	if !strings.Contains(envelope.Data.Suggestions.Amount.Evidence, "Amount: EUR 42.50") {
+		t.Fatalf("expected amount evidence, got %+v", envelope.Data.Suggestions.Amount)
+	}
+	if envelope.Data.Suggestions.Reference.Value != "INV-2026-001" || envelope.Data.Suggestions.Reference.Source != "text" {
+		t.Fatalf("unexpected reference suggestion: %+v", envelope.Data.Suggestions.Reference)
+	}
+	if envelope.Data.Plan.PaymentDetails.IBAN != "BE68539007547034" || envelope.Data.Plan.PaymentDetails.Amount != "42.50" {
+		t.Fatalf("expected validated payment details in plan, got %+v", envelope.Data.Plan.PaymentDetails)
+	}
+	if !strings.Contains(envelope.Data.Plan.EPC.Payload, "\nACME BV\nBE68539007547034\nEUR42.50\n") {
+		t.Fatalf("expected EPC payload in plan, got %q", envelope.Data.Plan.EPC.Payload)
+	}
+	if envelope.Data.Plan.Output.Path != out || envelope.Data.Plan.Output.Format != "svg" {
+		t.Fatalf("expected output plan, got %+v", envelope.Data.Plan.Output)
+	}
+}
+
+func TestFromTextDryRunJSONMarksExplicitOverrides(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "invoice.txt")
+	out := filepath.Join(dir, "invoice.svg")
+	if err := os.WriteFile(input, []byte(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Reference: INV-2026-001
+`), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	cmd := exec.Command("go", "run", ".", "from-text", input,
+		"--amount", "10",
+		"--reference", "MANUAL-REF",
+		"--out", out,
+		"--dry-run",
+		"--json",
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("expected from-text dry-run JSON to succeed, output:\n%s", output)
+	}
+	var envelope struct {
+		Data struct {
+			Suggestions struct {
+				Amount struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"amount"`
+				Reference struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"reference"`
+				IBAN struct {
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"iban"`
+			} `json:"suggestions"`
+			Plan struct {
+				PaymentDetails paymentDetailsJSON `json:"payment_details"`
+			} `json:"plan"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if envelope.Data.Suggestions.Amount.Value != "10" || envelope.Data.Suggestions.Amount.Source != "override" || envelope.Data.Suggestions.Amount.Evidence != "" {
+		t.Fatalf("unexpected amount override: %+v", envelope.Data.Suggestions.Amount)
+	}
+	if envelope.Data.Suggestions.Reference.Value != "MANUAL-REF" || envelope.Data.Suggestions.Reference.Source != "override" || envelope.Data.Suggestions.Reference.Evidence != "" {
+		t.Fatalf("unexpected reference override: %+v", envelope.Data.Suggestions.Reference)
+	}
+	if envelope.Data.Suggestions.IBAN.Source != "text" || envelope.Data.Suggestions.IBAN.Evidence == "" {
+		t.Fatalf("expected text-derived iban evidence, got %+v", envelope.Data.Suggestions.IBAN)
+	}
+	if envelope.Data.Plan.PaymentDetails.Amount != "10.00" || envelope.Data.Plan.PaymentDetails.Reference.Value != "MANUAL-REF" {
+		t.Fatalf("expected override values in validated plan, got %+v", envelope.Data.Plan.PaymentDetails)
+	}
+}
+
+func TestFromTextDryRunJSONAmbiguousSuggestionPrintsErrorEnvelope(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "from-text", "--out", out, "--dry-run", "--json")
+	cmd.Stdin = strings.NewReader(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Total: EUR 12.00
+Reference: INV-1
+`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected ambiguity failure")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "suggestion_error", "amount", "ambiguous")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	if strings.Contains(stdout.String(), "Payment Details") || strings.Contains(stdout.String(), "Write QR artifact") {
+		t.Fatalf("expected JSON-only error output, got:\n%s", stdout.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromTextDryRunJSONAmbiguousIBANPrintsErrorEnvelope(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "from-text", "--out", out, "--dry-run", "--json")
+	cmd.Stdin = strings.NewReader(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Alternative IBAN: NL91 ABNA 0417 1643 00
+Amount: EUR 42.50
+Reference: INV-1
+`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected iban ambiguity failure")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "suggestion_error", "iban", "ambiguous")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromTextDryRunJSONMissingSuggestionPrintsErrorEnvelope(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "from-text", "--out", out, "--dry-run", "--json")
+	cmd.Stdin = strings.NewReader(`
+Payee: ACME BV
+Amount: EUR 42.50
+Reference: INV-1
+`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected missing-field failure")
+	}
+	assertGenerateJSONError(t, stdout.Bytes(), "suggestion_error", "iban", "required")
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
+func TestFromTextDryRunJSONInvalidCompleteSuggestionOmitsEPCPayload(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "from-text",
+		"--amount", "0",
+		"--out", out,
+		"--dry-run",
+		"--json",
+	)
+	cmd.Stdin = strings.NewReader(clearInvoiceText())
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected validation failure")
+	}
+	if strings.Contains(stdout.String(), "payload") || strings.Contains(stdout.String(), "BCD") {
+		t.Fatalf("expected no EPC payload data, got:\n%s", stdout.String())
+	}
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				Amount struct {
+					Value  string `json:"value"`
+					Source string `json:"source"`
+				} `json:"amount"`
+			} `json:"suggestions"`
+			Plan any `json:"plan"`
+		} `json:"data"`
+		Error cliErrorJSON `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, stdout.String())
+	}
+	if envelope.Success || envelope.Error.Code != "generation_error" || envelope.Error.Field != "amount" || !strings.Contains(envelope.Error.Message, "greater than zero") {
+		t.Fatalf("unexpected error envelope: %+v", envelope)
+	}
+	if envelope.Data.Suggestions.Amount.Value != "0" || envelope.Data.Suggestions.Amount.Source != "override" {
+		t.Fatalf("expected invalid override suggestion to remain visible, got %+v", envelope.Data.Suggestions.Amount)
+	}
+	if envelope.Data.Plan != nil {
+		t.Fatalf("expected no plan for invalid complete suggestion, got %#v", envelope.Data.Plan)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
 func TestFromTextStdinUsesOverridesAndTerminalConfirmation(t *testing.T) {
 	dir := t.TempDir()
 	out := filepath.Join(dir, "invoice.svg")
@@ -959,6 +1266,65 @@ func TestFromPDFInvokesPdftotextAndWritesAfterConfirmation(t *testing.T) {
 		t.Fatalf("runner args = %#v, want %#v", gotArgs, []string{"invoice.pdf", "-"})
 	}
 	assertSVGOutput(t, out)
+}
+
+func TestFromPDFDryRunJSONUsesExtractedTextEvidence(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	withPDFTextCommandRunner(t, func(name string, args ...string) ([]byte, error) {
+		if name != "pdftotext" || strings.Join(args, "\x00") != strings.Join([]string{"invoice.pdf", "-"}, "\x00") {
+			t.Fatalf("unexpected pdftotext call %s %#v", name, args)
+		}
+		return []byte(clearInvoiceText()), nil
+	})
+
+	output := captureStdout(t, func() error {
+		return FromPDFCmd{
+			PDF:           "invoice.pdf",
+			QROutputFlags: QROutputFlags{Out: out},
+			DryRun:        true,
+			JSON:          true,
+		}.Run()
+	})
+
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				IBAN struct {
+					Value    string `json:"value"`
+					Source   string `json:"source"`
+					Evidence string `json:"evidence"`
+				} `json:"iban"`
+			} `json:"suggestions"`
+			Plan struct {
+				EPC struct {
+					Payload string `json:"payload"`
+				} `json:"epc"`
+			} `json:"plan"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(output, &envelope); err != nil {
+		t.Fatalf("expected valid JSON, got %v:\n%s", err, output)
+	}
+	if !envelope.Success || envelope.Error != nil {
+		t.Fatalf("expected success envelope, got:\n%s", output)
+	}
+	if envelope.Data.Suggestions.IBAN.Value != "BE68 5390 0754 7034" || envelope.Data.Suggestions.IBAN.Source != "text" {
+		t.Fatalf("unexpected iban suggestion: %+v", envelope.Data.Suggestions.IBAN)
+	}
+	if !strings.Contains(envelope.Data.Suggestions.IBAN.Evidence, "IBAN: BE68 5390 0754 7034") {
+		t.Fatalf("expected extracted text evidence, got %+v", envelope.Data.Suggestions.IBAN)
+	}
+	if strings.Contains(strings.ToLower(envelope.Data.Suggestions.IBAN.Evidence), "page") || strings.Contains(envelope.Data.Suggestions.IBAN.Evidence, ",") {
+		t.Fatalf("expected text snippet without coordinates, got %+v", envelope.Data.Suggestions.IBAN)
+	}
+	if !strings.Contains(envelope.Data.Plan.EPC.Payload, "BE68539007547034") {
+		t.Fatalf("expected EPC payload, got %q", envelope.Data.Plan.EPC.Payload)
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no dry-run output file, got stat err %v", statErr)
+	}
 }
 
 func TestFromPDFExtractsGeneratedInvoicePDFAndWritesAfterConfirmation(t *testing.T) {
@@ -1186,6 +1552,33 @@ func setStdin(t *testing.T, input string) {
 		os.Stdin = oldStdin
 		file.Close()
 	})
+}
+
+func captureStdout(t *testing.T, run func() error) []byte {
+	t.Helper()
+
+	file, err := os.CreateTemp(t.TempDir(), "stdout-*.txt")
+	if err != nil {
+		t.Fatalf("create stdout: %v", err)
+	}
+	oldStdout := os.Stdout
+	os.Stdout = file
+	defer func() {
+		os.Stdout = oldStdout
+		file.Close()
+	}()
+
+	if err := run(); err != nil {
+		t.Fatalf("run command: %v", err)
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		t.Fatalf("seek stdout: %v", err)
+	}
+	output, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	return output
 }
 
 func assertGenerateJSONError(t *testing.T, output []byte, code string, field string, message string) {

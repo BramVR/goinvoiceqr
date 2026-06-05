@@ -53,6 +53,25 @@ type generateArtifactJSON struct {
 	Output         artifactOutputJSON `json:"output"`
 }
 
+type suggestionDryRunJSON struct {
+	Suggestions suggestionFieldsJSON `json:"suggestions"`
+	Plan        *generateDryRunJSON  `json:"plan,omitempty"`
+}
+
+type suggestionFieldsJSON struct {
+	Payee     suggestionFieldJSON  `json:"payee"`
+	IBAN      suggestionFieldJSON  `json:"iban"`
+	Amount    suggestionFieldJSON  `json:"amount"`
+	Reference suggestionFieldJSON  `json:"reference"`
+	BIC       *suggestionFieldJSON `json:"bic,omitempty"`
+}
+
+type suggestionFieldJSON struct {
+	Value    string `json:"value"`
+	Source   string `json:"source"`
+	Evidence string `json:"evidence,omitempty"`
+}
+
 type epcJSON struct {
 	ServiceTag     string `json:"service_tag"`
 	Version        string `json:"version"`
@@ -127,6 +146,43 @@ func generateArtifactJSONData(plan invoiceqr.PaymentArtifactPlan, result invoice
 			Format:    string(result.Format),
 			ByteCount: result.ByteCount,
 		},
+	}
+}
+
+func suggestionDryRunJSONData(report invoiceqr.SuggestedPaymentDetailsReport, plan invoiceqr.PaymentArtifactPlan) suggestionDryRunJSON {
+	planData := generateDryRunJSONData(plan)
+	return suggestionDryRunJSON{
+		Suggestions: suggestionFieldsJSONData(report),
+		Plan:        &planData,
+	}
+}
+
+func suggestionDryRunErrorJSONData(report invoiceqr.SuggestedPaymentDetailsReport) suggestionDryRunJSON {
+	return suggestionDryRunJSON{
+		Suggestions: suggestionFieldsJSONData(report),
+	}
+}
+
+func suggestionFieldsJSONData(report invoiceqr.SuggestedPaymentDetailsReport) suggestionFieldsJSON {
+	var bic *suggestionFieldJSON
+	if report.BIC.Value != "" {
+		bicData := suggestionFieldJSONData(report.BIC)
+		bic = &bicData
+	}
+	return suggestionFieldsJSON{
+		Payee:     suggestionFieldJSONData(report.Payee),
+		IBAN:      suggestionFieldJSONData(report.IBAN),
+		Amount:    suggestionFieldJSONData(report.Amount),
+		Reference: suggestionFieldJSONData(report.Reference),
+		BIC:       bic,
+	}
+}
+
+func suggestionFieldJSONData(field invoiceqr.SuggestedPaymentField) suggestionFieldJSON {
+	return suggestionFieldJSON{
+		Value:    field.Value,
+		Source:   field.Source,
+		Evidence: field.Evidence,
 	}
 }
 

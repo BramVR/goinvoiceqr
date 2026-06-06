@@ -998,6 +998,34 @@ IBAN BE68 5390 0754 7034
 	}
 }
 
+func TestSuggestPaymentDetailsReportDoesNotSelectCustomerDetailsAfterAmountAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Customer details
+Jane Customer BV
+VAT BE 0123.456.789
+Delivery details
+Jane Customer BV
+VAT BE 0123.456.789
+Reference: INV-2026-001
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for customer details after amount, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
 func TestSuggestPaymentDetailsReportDoesNotSelectCustomerNameLabelAsFooterBrandPayee(t *testing.T) {
 	report, err := SuggestPaymentDetailsReportFromText(`
 Invoice INV-2026-001

@@ -11,6 +11,7 @@ var (
 	creditorIBANLineLabelPattern = regexp.MustCompile(`(?i)^\s*(?:creditor|payee|beneficiary|supplier|begunstigde|leverancier)\s*:\s*`)
 	creditorIBANMarkerPattern    = regexp.MustCompile(`(?i)\bIBAN\b\s*:?\s*[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
 	customerDetailLinePattern    = regexp.MustCompile(`(?i)^\s*(?:name|customer(?:\s+name)?|client(?:\s+name)?|billing(?:\s+name)?|delivery(?:\s+name)?|ship(?:ped)?\s*to|bill(?:ed)?\s*to|invoice\s*to|klant|naam)\s*:`)
+	customerSectionLinePattern   = regexp.MustCompile(`(?i)^\s*(?:customer|client|billing|delivery|shipping|ship(?:ped)?\s*to|bill(?:ed)?\s*to|invoice\s*to|klant)(?:\s+(?:details|information|info|gegevens|data))?\s*:?\s*$`)
 	legalEntitySuffixPattern     = regexp.MustCompile(`(?i)(?:^|\s)(?:B\.V\.|BVBA|BV|N\.V\.|NV|CV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL)$`)
 	legalEntityNamePattern       = regexp.MustCompile(`(?i)^(.+?\b(?:B\.V\.|BVBA|BV|N\.V\.|NV|CV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL))(?:\s|$)`)
 	footerBrandAdjacentPattern   = regexp.MustCompile(`(?i)\b(?:IBAN|BIC|VAT|BTW|TVA|BE\s*\d{4}[.\s]?\d{3}[.\s]?\d{3})\b|@|https?://|www\.|\b(?:tel|phone|email|mail)\b`)
@@ -82,12 +83,23 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 	}
 	occurrences := map[string][]AgentContextCandidate{}
 	order := []string{}
+	inCustomerSection := false
 	for index, line := range lines {
 		lineNumber := index + 1
 		if lineNumber < footerStartLine {
 			continue
 		}
-		if payeeLinePattern.MatchString(line) || customerDetailLinePattern.MatchString(line) {
+		if footerBrandCustomerContextLine(line) {
+			inCustomerSection = true
+			continue
+		}
+		if payeeLinePattern.MatchString(line) {
+			continue
+		}
+		if footerBrandContextResetLine(line) {
+			inCustomerSection = false
+		}
+		if inCustomerSection {
 			continue
 		}
 		candidate, ok := legalEntityNameCandidate(line)
@@ -141,6 +153,14 @@ func footerBrandContextBoundaryLine(line string) bool {
 		return true
 	}
 	return false
+}
+
+func footerBrandCustomerContextLine(line string) bool {
+	return customerDetailLinePattern.MatchString(line) || customerSectionLinePattern.MatchString(line)
+}
+
+func footerBrandContextResetLine(line string) bool {
+	return footerBrandContextBoundaryLine(line) || referenceLinePattern.MatchString(line) || structuredRefPattern.MatchString(line) || strings.Contains(strings.ToLower(line), "iban")
 }
 
 func footerBrandBankAdjacent(lines []string, matches []AgentContextCandidate) bool {

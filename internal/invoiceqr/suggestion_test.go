@@ -165,22 +165,34 @@ Reference: INV-2026-001
 }
 
 func TestSuggestPaymentDetailsFromTextDoesNotSelectPaymentFeeAsInstructionAmount(t *testing.T) {
-	report, err := SuggestPaymentDetailsReportFromText(`
+	tests := []struct {
+		name string
+		line string
+	}{
+		{name: "payment fee", line: "Payment fee: EUR 2.50"},
+		{name: "late fee after pay wording", line: "Please pay before the due date. Late fee: EUR 2.50"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(`
 Payee: ACME BV
 IBAN: BE68 5390 0754 7034
-Payment fee: EUR 2.50
+`+tt.line+`
 Total amount to pay: EUR 121.00
 Reference: INV-2026-001
 `, PaymentDetails{})
 
-	if err != nil {
-		t.Fatalf("expected suggestion report, got %v", err)
-	}
-	if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
-		t.Fatalf("unexpected selected amount: %+v", report.Amount)
-	}
-	if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
-		t.Fatalf("expected payable-total amount candidate, got %+v", report.AgentContext.Candidates.Amount)
+			if err != nil {
+				t.Fatalf("expected suggestion report, got %v", err)
+			}
+			if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
+				t.Fatalf("unexpected selected amount: %+v", report.Amount)
+			}
+			if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
+				t.Fatalf("expected payable-total amount candidate, got %+v", report.AgentContext.Candidates.Amount)
+			}
+		})
 	}
 }
 

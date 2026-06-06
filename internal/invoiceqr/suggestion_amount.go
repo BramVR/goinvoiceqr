@@ -17,6 +17,12 @@ var (
 	standaloneCurrencyBeforeAmountPattern = regexp.MustCompile(`(?i)^` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `$`)
 	standaloneCurrencyAfterAmountPattern  = regexp.MustCompile(`(?i)^` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `$`)
 	signedAmountPattern                   = regexp.MustCompile(`(?i)(?:EUR|€)` + currencyWhitespacePatternText + `-` + currencyWhitespacePatternText + amountTokenPatternText + `|(?:^|[:\p{Zs}\t])-` + currencyWhitespacePatternText + amountTokenPatternText + `|(?:EUR|€)` + currencyWhitespacePatternText + `\(` + currencyWhitespacePatternText + amountTokenPatternText + currencyWhitespacePatternText + `\)|(?:^|[:\p{Zs}\t])\(` + currencyWhitespacePatternText + `(?:EUR|€)?` + currencyWhitespacePatternText + amountTokenPatternText + currencyWhitespacePatternText + `\)`)
+	paymentInstructionAmountPatterns      = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)`),
+		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)\b`),
+		regexp.MustCompile(`(?i)\bgelieve\s+(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `te\s+betalen\b`),
+		regexp.MustCompile(`(?i)\bgelieve\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `te\s+betalen\b`),
+	}
 )
 
 const amountTokenPatternText = `[0-9](?:[0-9.,\p{Zs}\t]*[0-9])?`
@@ -94,6 +100,24 @@ func findStandaloneCurrencyAmountCandidatesInLine(line string) []string {
 		}
 	}
 	return candidates
+}
+
+func findPaymentInstructionAmountCandidatesInLine(line string) []string {
+	if signedAmountPattern.MatchString(line) {
+		return nil
+	}
+	candidates := []string{}
+	for _, pattern := range paymentInstructionAmountPatterns {
+		for _, match := range pattern.FindAllStringSubmatch(line, -1) {
+			if len(match) > 1 && match[1] != "" {
+				candidates = append(candidates, match[1])
+			}
+		}
+		if len(candidates) > 0 {
+			return candidates
+		}
+	}
+	return nil
 }
 
 func normalizeSuggestedAmount(input string) (string, error) {

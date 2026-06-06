@@ -7,10 +7,7 @@ import (
 	"strings"
 )
 
-var (
-	paymentInstructionPattern       = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
-	paymentInstructionAmountPattern = regexp.MustCompile(`(?i)\b(?:please\s+pay|pay\s+(?:EUR|€|[0-9])|gelieve\b.*\bte\s+betalen\b)`)
-)
+var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
 
 const (
 	amountCandidateKindPaymentInstruction = "payment_instruction"
@@ -109,10 +106,6 @@ func paymentInstructionLine(line string) bool {
 	return paymentInstructionPattern.MatchString(line)
 }
 
-func paymentInstructionAmountLine(line string) bool {
-	return paymentInstructionAmountPattern.MatchString(line)
-}
-
 func firstNonEmptyLineIndex(lines []string) int {
 	for index, line := range lines {
 		if strings.TrimSpace(line) != "" {
@@ -202,10 +195,10 @@ func agentContextPaymentInstructionAmountCandidates(text string) []AgentContextC
 	candidates := []AgentContextCandidate{}
 	seen := map[string]bool{}
 	for index, line := range lines {
-		if !paymentInstructionAmountLine(line) || amountDueLinePattern.MatchString(line) {
+		if amountDueLinePattern.MatchString(line) {
 			continue
 		}
-		for _, value := range findCurrencyAmountCandidatesInLine(line) {
+		for _, value := range findPaymentInstructionAmountCandidatesInLine(line) {
 			candidates = appendAgentContextAmountCandidate(candidates, seen, value, line, index+1, amountCandidateKindPaymentInstruction)
 		}
 	}

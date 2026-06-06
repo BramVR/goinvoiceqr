@@ -77,10 +77,11 @@ type suggestionFieldJSON struct {
 }
 
 type agentContextJSON struct {
-	SourceTextHash string                     `json:"source_text_hash"`
-	FullText       string                     `json:"full_text,omitempty"`
-	ObservedLines  []agentContextObservedJSON `json:"observed_lines"`
-	Candidates     agentContextCandidatesJSON `json:"candidates"`
+	SourceTextHash   string                      `json:"source_text_hash"`
+	FullText         string                      `json:"full_text,omitempty"`
+	ObservedLines    []agentContextObservedJSON  `json:"observed_lines"`
+	Candidates       agentContextCandidatesJSON  `json:"candidates"`
+	ReviewCandidates *agentContextCandidatesJSON `json:"review_candidates,omitempty"`
 }
 
 type agentContextObservedJSON struct {
@@ -102,6 +103,7 @@ type agentContextCandidateJSON struct {
 	Evidence   string `json:"evidence"`
 	Line       int    `json:"line"`
 	Kind       string `json:"kind,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 type epcJSON struct {
@@ -199,17 +201,31 @@ func suggestionDryRunJSONData(result invoiceqr.SuggestedPaymentArtifactPlan, err
 }
 
 func agentContextJSONData(context invoiceqr.AgentContext) agentContextJSON {
-	return agentContextJSON{
-		SourceTextHash: context.SourceTextHash,
-		FullText:       context.FullText,
-		ObservedLines:  agentContextObservedJSONData(context.ObservedLines),
-		Candidates: agentContextCandidatesJSON{
-			Payee:     agentContextCandidateJSONData(context.Candidates.Payee),
-			IBAN:      agentContextCandidateJSONData(context.Candidates.IBAN),
-			Amount:    agentContextCandidateJSONData(context.Candidates.Amount),
-			Reference: agentContextCandidateJSONData(context.Candidates.Reference),
-		},
+	reviewCandidates := agentContextCandidatesJSONData(context.ReviewCandidates)
+	var reviewCandidatesPointer *agentContextCandidatesJSON
+	if agentContextCandidatesJSONHasValues(reviewCandidates) {
+		reviewCandidatesPointer = &reviewCandidates
 	}
+	return agentContextJSON{
+		SourceTextHash:   context.SourceTextHash,
+		FullText:         context.FullText,
+		ObservedLines:    agentContextObservedJSONData(context.ObservedLines),
+		Candidates:       agentContextCandidatesJSONData(context.Candidates),
+		ReviewCandidates: reviewCandidatesPointer,
+	}
+}
+
+func agentContextCandidatesJSONData(candidates invoiceqr.AgentContextCandidates) agentContextCandidatesJSON {
+	return agentContextCandidatesJSON{
+		Payee:     agentContextCandidateJSONData(candidates.Payee),
+		IBAN:      agentContextCandidateJSONData(candidates.IBAN),
+		Amount:    agentContextCandidateJSONData(candidates.Amount),
+		Reference: agentContextCandidateJSONData(candidates.Reference),
+	}
+}
+
+func agentContextCandidatesJSONHasValues(candidates agentContextCandidatesJSON) bool {
+	return len(candidates.Payee) > 0 || len(candidates.IBAN) > 0 || len(candidates.Amount) > 0 || len(candidates.Reference) > 0
 }
 
 func agentContextObservedJSONData(lines []invoiceqr.AgentContextObservedLine) []agentContextObservedJSON {
@@ -233,6 +249,7 @@ func agentContextCandidateJSONData(candidates []invoiceqr.AgentContextCandidate)
 			Evidence:   candidate.Evidence,
 			Line:       candidate.Line,
 			Kind:       candidate.Kind,
+			Reason:     candidate.Reason,
 		})
 	}
 	return data

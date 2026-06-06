@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
+var (
+	paymentInstructionPattern       = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
+	paymentInstructionAmountPattern = regexp.MustCompile(`(?i)\b(?:please\s+pay|pay\s+(?:EUR|€|[0-9])|gelieve\b.*\bte\s+betalen\b)`)
+)
 
 const (
 	amountCandidateKindPaymentInstruction = "payment_instruction"
@@ -106,6 +109,10 @@ func paymentInstructionLine(line string) bool {
 	return paymentInstructionPattern.MatchString(line)
 }
 
+func paymentInstructionAmountLine(line string) bool {
+	return paymentInstructionAmountPattern.MatchString(line)
+}
+
 func firstNonEmptyLineIndex(lines []string) int {
 	for index, line := range lines {
 		if strings.TrimSpace(line) != "" {
@@ -195,7 +202,7 @@ func agentContextPaymentInstructionAmountCandidates(text string) []AgentContextC
 	candidates := []AgentContextCandidate{}
 	seen := map[string]bool{}
 	for index, line := range lines {
-		if !paymentInstructionLine(line) || amountDueLinePattern.MatchString(line) {
+		if !paymentInstructionAmountLine(line) || amountDueLinePattern.MatchString(line) {
 			continue
 		}
 		for _, value := range findCurrencyAmountCandidatesInLine(line) {

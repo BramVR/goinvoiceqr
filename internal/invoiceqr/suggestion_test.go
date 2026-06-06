@@ -164,6 +164,26 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsFromTextDoesNotSelectPaymentFeeAsInstructionAmount(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Payment fee: EUR 2.50
+Total amount to pay: EUR 121.00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
+		t.Fatalf("unexpected selected amount: %+v", report.Amount)
+	}
+	if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
+		t.Fatalf("expected payable-total amount candidate, got %+v", report.AgentContext.Candidates.Amount)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextReportsAmbiguousPaymentInstructionAmounts(t *testing.T) {
 	report, err := SuggestPaymentDetailsReportFromText(`
 Payee: ACME BV

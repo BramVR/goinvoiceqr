@@ -110,6 +110,215 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsFromTextFindsPaymentInstructionAmount(t *testing.T) {
+	tests := []struct {
+		name   string
+		line   string
+		amount string
+	}{
+		{name: "dutch", line: "Gelieve € 86,36 te betalen"},
+		{name: "english", line: "Please pay EUR 86.36"},
+		{name: "english euro after", line: "Please pay 86,36 €"},
+		{name: "english before date", line: "Please pay EUR 86.36 2026-06-30"},
+		{name: "english before reference", line: "Please pay EUR 86.36 123"},
+		{name: "integer before date", line: "Please pay EUR 1000 2026-06-30", amount: "1000.00"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+`+tt.line+`
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err != nil {
+				t.Fatalf("expected suggestion, got %v", err)
+			}
+			wantAmount := tt.amount
+			if wantAmount == "" {
+				wantAmount = "86.36"
+			}
+			if suggestion.Amount != wantAmount {
+				t.Fatalf("amount = %q, want %s", suggestion.Amount, wantAmount)
+			}
+		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextPrefersPaymentInstructionAmount(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Gelieve € 86,36 te betalen
+Total amount to pay: EUR 42.50
+Total: EUR 12.00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	if report.Amount.Value != "86.36" || report.Amount.Evidence != "Gelieve € 86,36 te betalen" {
+		t.Fatalf("unexpected selected amount: %+v", report.Amount)
+	}
+	if len(report.AgentContext.ReviewCandidates.Amount) != 1 {
+		t.Fatalf("expected conflicting totals as review candidates, got %+v", report.AgentContext.ReviewCandidates.Amount)
+	}
+	for _, candidate := range report.AgentContext.ReviewCandidates.Amount {
+		if candidate.Reason != "conflicting_generic_total" {
+			t.Fatalf("expected conflicting_generic_total reason, got %+v", candidate)
+		}
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotSelectPaymentFeeAsInstructionAmount(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{name: "payment fee", line: "Payment fee: EUR 2.50"},
+		{name: "late fee after pay wording", line: "Please pay before the due date. Late fee: EUR 2.50"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+`+tt.line+`
+Total amount to pay: EUR 121.00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err != nil {
+				t.Fatalf("expected suggestion report, got %v", err)
+			}
+			if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
+				t.Fatalf("unexpected selected amount: %+v", report.Amount)
+			}
+			if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
+				t.Fatalf("expected payable-total amount candidate, got %+v", report.AgentContext.Candidates.Amount)
+			}
+		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextDoesNotTruncateMalformedPaymentInstructionAmount(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{name: "short malformed group", line: "Please pay EUR 12 34"},
+		{name: "mixed malformed group", line: "Please pay EUR 1.234 567"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+`+tt.line+`
+Total amount to pay: EUR 121.00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err != nil {
+				t.Fatalf("expected suggestion report, got %v", err)
+			}
+			if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
+				t.Fatalf("unexpected selected amount: %+v", report.Amount)
+			}
+			if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
+				t.Fatalf("expected payable-total fallback, got %+v", report.AgentContext.Candidates.Amount)
+			}
+		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextUsesBarePayableTotalAmount(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay 15,00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextReportsAmbiguousPaymentInstructionAmounts(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+	}{
+		{
+			name: "separate lines",
+			text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Please pay EUR 86.36
+Gelieve € 42,50 te betalen
+Reference: INV-2026-001
+`,
+		},
+		{
+			name: "same line",
+			text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Please pay EUR 86.36 or pay 42,50 EUR
+Reference: INV-2026-001
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(tt.text, PaymentDetails{})
+
+			if err == nil {
+				t.Fatalf("expected amount ambiguity")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "amount") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
+				t.Fatalf("expected amount ambiguity, got %v", err)
+			}
+			if report.Amount.Value != "" || len(report.AgentContext.Candidates.Amount) != 2 {
+				t.Fatalf("expected ambiguous payment instruction candidates, report=%+v", report)
+			}
+		})
+	}
+}
+
+func TestBuildSuggestedPaymentArtifactPlanOmitsPlanForAmbiguousPaymentInstructionAmounts(t *testing.T) {
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Please pay EUR 86.36
+Gelieve € 42,50 te betalen
+Reference: INV-2026-001
+`,
+		Output: QROutputOptions{Out: "invoice.qr", Format: "svg"},
+	})
+
+	if err == nil {
+		t.Fatalf("expected amount ambiguity")
+	}
+	if !result.HasReport || result.HasPlan {
+		t.Fatalf("expected report without plan, got %+v", result)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "amount") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
+		t.Fatalf("expected amount ambiguity, got %v", err)
+	}
+}
+
 func TestSuggestPaymentDetailsReportFromTextUsesSelectedAmountEvidence(t *testing.T) {
 	report, err := SuggestPaymentDetailsReportFromText(`
 Payee: ACME BV

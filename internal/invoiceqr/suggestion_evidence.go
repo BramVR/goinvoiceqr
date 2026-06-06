@@ -34,9 +34,59 @@ func suggestionEvidenceFromText(text string) []suggestionEvidence {
 	evidence := []suggestionEvidence{}
 	evidence = appendAgentContextEvidence(evidence, "payee", agentContextPayeeCandidates(text), suggestionEvidenceStatusCandidate, "")
 	evidence = appendAgentContextEvidence(evidence, "iban", agentContextIBANCandidates(text), suggestionEvidenceStatusCandidate, "")
-	evidence = appendAgentContextEvidence(evidence, "amount", agentContextAmountCandidates(text), suggestionEvidenceStatusCandidate, "")
+	evidence = append(evidence, suggestionAmountEvidenceFromText(text)...)
 	evidence = appendAgentContextEvidence(evidence, "reference", agentContextReferenceCandidates(text), suggestionEvidenceStatusCandidate, "")
 	return evidence
+}
+
+func suggestionAmountEvidenceFromText(text string) []suggestionEvidence {
+	if paymentInstructionCandidates := agentContextPaymentInstructionAmountCandidates(text); len(paymentInstructionCandidates) > 0 {
+		evidence := appendAgentContextEvidence(nil, "amount", paymentInstructionCandidates, suggestionEvidenceStatusCandidate, "")
+		if selectedAmount, ok := singleNormalizedAmount(paymentInstructionCandidates); ok {
+			conflicts := conflictingAmountCandidates(agentContextConflictingGenericAmountCandidates(text), selectedAmount)
+			evidence = appendAgentContextEvidence(evidence, "amount", conflicts, suggestionEvidenceStatusReview, "conflicting_generic_total")
+		}
+		return evidence
+	}
+	if payableTotalCandidates := agentContextPayableTotalAmountCandidates(text); len(payableTotalCandidates) > 0 {
+		return appendAgentContextEvidence(nil, "amount", payableTotalCandidates, suggestionEvidenceStatusCandidate, "")
+	}
+	return appendAgentContextEvidence(nil, "amount", agentContextGenericAmountCandidates(text), suggestionEvidenceStatusCandidate, "")
+}
+
+func singleNormalizedAmount(candidates []AgentContextCandidate) (string, bool) {
+	selected := ""
+	for _, candidate := range candidates {
+		value := candidate.Normalized
+		if value == "" {
+			value = strings.TrimSpace(candidate.Value)
+		}
+		if value == "" {
+			continue
+		}
+		if selected == "" {
+			selected = value
+			continue
+		}
+		if selected != value {
+			return "", false
+		}
+	}
+	return selected, selected != ""
+}
+
+func conflictingAmountCandidates(candidates []AgentContextCandidate, selected string) []AgentContextCandidate {
+	conflicts := []AgentContextCandidate{}
+	for _, candidate := range candidates {
+		value := candidate.Normalized
+		if value == "" {
+			value = strings.TrimSpace(candidate.Value)
+		}
+		if value != "" && value != selected {
+			conflicts = append(conflicts, candidate)
+		}
+	}
+	return conflicts
 }
 
 func appendAgentContextEvidence(evidence []suggestionEvidence, field string, candidates []AgentContextCandidate, status, reason string) []suggestionEvidence {

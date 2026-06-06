@@ -9,6 +9,12 @@ import (
 
 var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
 
+const (
+	amountCandidateKindPaymentInstruction = "payment_instruction"
+	amountCandidateKindPayableTotal       = "payable_total"
+	amountCandidateKindGenericTotal       = "generic_total"
+)
+
 type AgentContext struct {
 	SourceTextHash   string
 	FullText         string
@@ -174,14 +180,52 @@ func agentContextIBANCandidates(text string) []AgentContextCandidate {
 	return candidates
 }
 
-func agentContextAmountCandidates(text string) []AgentContextCandidate {
-	if candidates := agentContextAmountCandidatesNearLines(text, amountDueLinePattern, true); len(candidates) > 0 {
-		return candidates
+func agentContextPaymentInstructionAmountCandidates(text string) []AgentContextCandidate {
+	lines := strings.Split(text, "\n")
+	candidates := []AgentContextCandidate{}
+	seen := map[string]bool{}
+	for index, line := range lines {
+		if amountDueLinePattern.MatchString(line) {
+			continue
+		}
+		for _, value := range findPaymentInstructionAmountCandidatesInLine(line) {
+			candidates = appendAgentContextAmountCandidate(candidates, seen, value, line, index+1, amountCandidateKindPaymentInstruction)
+		}
 	}
-	return agentContextAmountCandidatesNearLines(text, amountLinePattern, false)
+	return candidates
 }
 
-func agentContextAmountCandidatesNearLines(text string, pattern *regexp.Regexp, allowNextLine bool) []AgentContextCandidate {
+func agentContextPayableTotalAmountCandidates(text string) []AgentContextCandidate {
+	return agentContextAmountCandidatesNearLines(text, amountDueLinePattern, true, amountCandidateKindPayableTotal)
+}
+
+func agentContextGenericAmountCandidates(text string) []AgentContextCandidate {
+	return agentContextGenericAmountCandidatesWithPayable(text, true)
+}
+
+func agentContextConflictingGenericAmountCandidates(text string) []AgentContextCandidate {
+	return agentContextGenericAmountCandidatesWithPayable(text, false)
+}
+
+func agentContextGenericAmountCandidatesWithPayable(text string, includePayable bool) []AgentContextCandidate {
+	lines := strings.Split(text, "\n")
+	candidates := []AgentContextCandidate{}
+	seen := map[string]bool{}
+	for index, line := range lines {
+		if !includePayable && amountDueLinePattern.MatchString(line) {
+			continue
+		}
+		if !amountLinePattern.MatchString(line) {
+			continue
+		}
+		for _, value := range findAmountCandidatesInLine(line) {
+			candidates = appendAgentContextAmountCandidate(candidates, seen, value, line, index+1, amountCandidateKindGenericTotal)
+		}
+	}
+	return candidates
+}
+
+func agentContextAmountCandidatesNearLines(text string, pattern *regexp.Regexp, allowNextLine bool, kind string) []AgentContextCandidate {
 	lines := strings.Split(text, "\n")
 	candidates := []AgentContextCandidate{}
 	seen := map[string]bool{}
@@ -198,20 +242,25 @@ func agentContextAmountCandidatesNearLines(text string, pattern *regexp.Regexp, 
 			}
 		}
 		for _, value := range values {
-			normalized, err := normalizeSuggestedAmount(value)
-			if err != nil || seen[normalized] {
-				continue
-			}
-			seen[normalized] = true
-			candidates = append(candidates, AgentContextCandidate{
-				Value:      strings.TrimSpace(value),
-				Normalized: normalized,
-				Evidence:   strings.TrimSpace(lines[candidateLineIndex]),
-				Line:       candidateLineIndex + 1,
-			})
+			candidates = appendAgentContextAmountCandidate(candidates, seen, value, lines[candidateLineIndex], candidateLineIndex+1, kind)
 		}
 	}
 	return candidates
+}
+
+func appendAgentContextAmountCandidate(candidates []AgentContextCandidate, seen map[string]bool, value, evidence string, line int, kind string) []AgentContextCandidate {
+	normalized, err := normalizeSuggestedAmount(value)
+	if err != nil || seen[normalized] {
+		return candidates
+	}
+	seen[normalized] = true
+	return append(candidates, AgentContextCandidate{
+		Value:      strings.TrimSpace(value),
+		Normalized: normalized,
+		Evidence:   strings.TrimSpace(evidence),
+		Line:       line,
+		Kind:       kind,
+	})
 }
 
 func agentContextNextStandaloneAmountCandidates(lines []string, index int) (int, []string) {

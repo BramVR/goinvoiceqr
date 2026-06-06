@@ -1125,6 +1125,79 @@ Reference: INV-1
 	}
 }
 
+func TestFromTextDryRunJSONIncludesAmountReviewCandidates(t *testing.T) {
+	binary := buildInvoiceqrCLI(t)
+	out := filepath.Join(t.TempDir(), "invoice.svg")
+	cmd := exec.Command(binary, "from-text", "--out", out, "--dry-run", "--json")
+	cmd.Stdin = strings.NewReader(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Gelieve € 86,36 te betalen
+Total: EUR 12.00
+Reference: INV-1
+`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("expected dry-run success, got %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	var envelope struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Suggestions struct {
+				Amount struct {
+					Value    string `json:"value"`
+					Evidence string `json:"evidence"`
+				} `json:"amount"`
+			} `json:"suggestions"`
+			AgentContext struct {
+				ReviewCandidates struct {
+					Amount []struct {
+						Value      string `json:"value"`
+						Normalized string `json:"normalized"`
+						Evidence   string `json:"evidence"`
+						Line       int    `json:"line"`
+						Kind       string `json:"kind"`
+						Reason     string `json:"reason"`
+					} `json:"amount"`
+				} `json:"review_candidates"`
+			} `json:"agent_context"`
+			Plan *generateDryRunJSON `json:"plan"`
+		} `json:"data"`
+		Error any `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("expected valid JSON stdout, got %v:\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if !envelope.Success || envelope.Error != nil {
+		t.Fatalf("expected success envelope, got:\n%s", stdout.String())
+	}
+	if envelope.Data.Suggestions.Amount.Value != "86.36" || envelope.Data.Suggestions.Amount.Evidence != "Gelieve € 86,36 te betalen" {
+		t.Fatalf("unexpected amount suggestion: %+v", envelope.Data.Suggestions.Amount)
+	}
+	if envelope.Data.Plan == nil {
+		t.Fatalf("expected plan for selected payment instruction amount")
+	}
+	if len(envelope.Data.AgentContext.ReviewCandidates.Amount) != 1 {
+		t.Fatalf("expected one amount review candidate, got %+v", envelope.Data.AgentContext.ReviewCandidates.Amount)
+	}
+	candidate := envelope.Data.AgentContext.ReviewCandidates.Amount[0]
+	if candidate.Value != "12.00" || candidate.Normalized != "12.00" ||
+		candidate.Evidence != "Total: EUR 12.00" || candidate.Line != 5 ||
+		candidate.Kind != "generic_total" || candidate.Reason != "conflicting_generic_total" {
+		t.Fatalf("unexpected review candidate: %+v", candidate)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("expected empty stderr, got:\n%s", stderr.String())
+	}
+	if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+		t.Fatalf("expected no output file, got stat err %v", statErr)
+	}
+}
+
 func TestFromTextDryRunJSONAmbiguousIBANPrintsErrorEnvelope(t *testing.T) {
 	binary := buildInvoiceqrCLI(t)
 	out := filepath.Join(t.TempDir(), "invoice.svg")

@@ -17,6 +17,12 @@ var (
 	standaloneCurrencyBeforeAmountPattern = regexp.MustCompile(`(?i)^` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `$`)
 	standaloneCurrencyAfterAmountPattern  = regexp.MustCompile(`(?i)^` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `$`)
 	signedAmountPattern                   = regexp.MustCompile(`(?i)(?:EUR|€)` + currencyWhitespacePatternText + `-` + currencyWhitespacePatternText + amountTokenPatternText + `|(?:^|[:\p{Zs}\t])-` + currencyWhitespacePatternText + amountTokenPatternText + `|(?:EUR|€)` + currencyWhitespacePatternText + `\(` + currencyWhitespacePatternText + amountTokenPatternText + currencyWhitespacePatternText + `\)|(?:^|[:\p{Zs}\t])\(` + currencyWhitespacePatternText + `(?:EUR|€)?` + currencyWhitespacePatternText + amountTokenPatternText + currencyWhitespacePatternText + `\)`)
+	paymentInstructionAmountPatterns      = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)`),
+		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR\b|€)`),
+		regexp.MustCompile(`(?i)\bgelieve\s+(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `te\s+betalen\b`),
+		regexp.MustCompile(`(?i)\bgelieve\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `te\s+betalen\b`),
+	}
 )
 
 const amountTokenPatternText = `[0-9](?:[0-9.,\p{Zs}\t]*[0-9])?`
@@ -94,6 +100,64 @@ func findStandaloneCurrencyAmountCandidatesInLine(line string) []string {
 		}
 	}
 	return candidates
+}
+
+func findPaymentInstructionAmountCandidatesInLine(line string) []string {
+	if signedAmountPattern.MatchString(line) {
+		return nil
+	}
+	candidates := []string{}
+	for _, pattern := range paymentInstructionAmountPatterns {
+		for _, match := range pattern.FindAllStringSubmatch(line, -1) {
+			if len(match) > 1 && match[1] != "" {
+				candidates = append(candidates, trimPaymentInstructionAmountCandidate(match[1]))
+			}
+		}
+	}
+	return candidates
+}
+
+func trimPaymentInstructionAmountCandidate(candidate string) string {
+	candidate = strings.TrimSpace(candidate)
+	for {
+		if _, err := normalizeSuggestedAmount(candidate); err == nil {
+			return candidate
+		}
+		trimmed := trimTrailingAmountChunk(candidate)
+		if trimmed == candidate {
+			return candidate
+		}
+		candidate = trimmed
+	}
+}
+
+func trimTrailingAmountChunk(candidate string) string {
+	trimmed := strings.TrimRightFunc(candidate, unicode.IsSpace)
+	index := strings.LastIndexFunc(trimmed, unicode.IsSpace)
+	if index < 0 {
+		return candidate
+	}
+	prefix := trimmed[:index]
+	if _, err := normalizeSuggestedAmount(prefix); err != nil {
+		return candidate
+	}
+	suffix := strings.TrimSpace(trimmed[index:])
+	if !hasDecimalFraction(prefix) && !longDigitToken(suffix) {
+		return candidate
+	}
+	return strings.TrimSpace(prefix)
+}
+
+func hasDecimalFraction(candidate string) bool {
+	index := strings.LastIndexAny(candidate, ".,")
+	if index < 0 {
+		return false
+	}
+	return validFraction(candidate[index+1:])
+}
+
+func longDigitToken(candidate string) bool {
+	return len(candidate) >= 4 && asciiDigits(candidate)
 }
 
 func normalizeSuggestedAmount(input string) (string, error) {

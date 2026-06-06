@@ -76,8 +76,12 @@ func footerBrandPayeeReviewCandidates(text string) []AgentContextCandidate {
 
 func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, []AgentContextCandidate) {
 	lines := strings.Split(text, "\n")
-	footerStartLine := footerBrandContextStartLine(lines)
+	footerStartLine, ok := footerBrandContextStartLine(lines)
+	if !ok {
+		return nil, nil
+	}
 	occurrences := map[string][]AgentContextCandidate{}
+	order := []string{}
 	for index, line := range lines {
 		lineNumber := index + 1
 		if lineNumber < footerStartLine {
@@ -90,6 +94,9 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 		if !ok {
 			continue
 		}
+		if len(occurrences[candidate]) == 0 {
+			order = append(order, candidate)
+		}
 		occurrences[candidate] = append(occurrences[candidate], AgentContextCandidate{
 			Value:    candidate,
 			Evidence: strings.TrimSpace(line),
@@ -99,7 +106,8 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 
 	candidates := []AgentContextCandidate{}
 	reviewCandidates := []AgentContextCandidate{}
-	for value, matches := range occurrences {
+	for _, value := range order {
+		matches := occurrences[value]
 		if !footerBrandBankAdjacent(lines, matches) {
 			continue
 		}
@@ -119,18 +127,21 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 	return candidates, reviewCandidates
 }
 
-func footerBrandContextStartLine(lines []string) int {
-	startLine := 1
+func footerBrandContextStartLine(lines []string) (int, bool) {
 	for index, line := range lines {
-		switch {
-		case amountDueLinePattern.MatchString(line),
-			amountLinePattern.MatchString(line),
-			referenceLinePattern.MatchString(line),
-			structuredRefPattern.MatchString(line):
-			startLine = index + 2
+		if footerBrandContextBoundaryLine(line) {
+			return index + 2, true
 		}
 	}
-	return startLine
+	return 0, false
+}
+
+func footerBrandContextBoundaryLine(line string) bool {
+	if amountDueLinePattern.MatchString(line) || amountLinePattern.MatchString(line) || structuredRefPattern.MatchString(line) {
+		return true
+	}
+	trimmed := strings.ToLower(strings.TrimSpace(line))
+	return !strings.HasPrefix(trimmed, "invoice") && referenceLinePattern.MatchString(line)
 }
 
 func footerBrandBankAdjacent(lines []string, matches []AgentContextCandidate) bool {

@@ -141,15 +141,3 @@ func suggestedPaymentDetails(details SuggestedPaymentDetails) PaymentDetails {
 		BIC:       details.BIC,
 	}
 }
-
-func appendUnique(values []string, value string) []string {
-	if value == "" {
-		return values
-	}
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
-	}
-	return append(values, value)
-}

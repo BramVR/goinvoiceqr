@@ -160,7 +160,7 @@ func footerBrandCustomerContextLine(line string) bool {
 }
 
 func footerBrandContextResetLine(line string) bool {
-	return footerBrandContextBoundaryLine(line) || referenceLinePattern.MatchString(line) || structuredRefPattern.MatchString(line) || strings.Contains(strings.ToLower(line), "iban")
+	return footerBrandContextBoundaryLine(line) || referenceLinePattern.MatchString(line) || structuredRefPattern.MatchString(line)
 }
 
 func footerBrandBankAdjacent(lines []string, matches []AgentContextCandidate) bool {

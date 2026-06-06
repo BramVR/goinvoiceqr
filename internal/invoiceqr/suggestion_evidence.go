@@ -42,10 +42,26 @@ func suggestionEvidenceFromText(text string) []suggestionEvidence {
 func suggestionPayeeEvidenceFromText(text string) []suggestionEvidence {
 	payeeCandidates := agentContextPayeeCandidates(text)
 	evidence := appendAgentContextEvidence(nil, "payee", payeeCandidates, suggestionEvidenceStatusCandidate, "")
-	if len(payeeCandidates) == 0 {
-		evidence = appendAgentContextEvidence(evidence, "payee", footerBrandPayeeReviewCandidates(text), suggestionEvidenceStatusReview, "weak_footer_brand")
-	}
+	reviewCandidates := payeeReviewCandidatesNotDuplicated(footerBrandPayeeReviewCandidates(text), payeeCandidates)
+	evidence = appendAgentContextEvidence(evidence, "payee", reviewCandidates, suggestionEvidenceStatusReview, "weak_footer_brand")
 	return evidence
+}
+
+func payeeReviewCandidatesNotDuplicated(reviewCandidates, payeeCandidates []AgentContextCandidate) []AgentContextCandidate {
+	selected := map[string]bool{}
+	for _, candidate := range payeeCandidates {
+		if value := strings.TrimSpace(candidate.Value); value != "" {
+			selected[value] = true
+		}
+	}
+	filtered := []AgentContextCandidate{}
+	for _, candidate := range reviewCandidates {
+		if selected[strings.TrimSpace(candidate.Value)] {
+			continue
+		}
+		filtered = appendUniqueAgentCandidate(filtered, candidate)
+	}
+	return filtered
 }
 
 func suggestionAmountEvidenceFromText(text string) []suggestionEvidence {

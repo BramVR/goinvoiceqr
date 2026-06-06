@@ -825,6 +825,31 @@ IBAN BE68 5390 0754 7034
 	}
 }
 
+func TestSuggestPaymentDetailsReportKeepsWeakFooterBrandReviewCandidateWithStrongPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Supplier: Billing Services BV
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	if report.Payee.Value != "Billing Services BV" {
+		t.Fatalf("payee = %q, want Billing Services BV", report.Payee.Value)
+	}
+	if len(report.AgentContext.ReviewCandidates.Payee) != 1 {
+		t.Fatalf("expected one payee review candidate, got %+v", report.AgentContext.ReviewCandidates.Payee)
+	}
+	candidate := report.AgentContext.ReviewCandidates.Payee[0]
+	if candidate.Value != "ACME Energy CV" || candidate.Kind != "footer_brand" || candidate.Reason != "weak_footer_brand" {
+		t.Fatalf("unexpected payee review candidate: %+v", candidate)
+	}
+}
+
 func TestSuggestPaymentDetailsReportKeepsWeakFooterBrandAsReviewCandidate(t *testing.T) {
 	report, err := SuggestPaymentDetailsReportFromText(`
 Invoice INV-2026-001

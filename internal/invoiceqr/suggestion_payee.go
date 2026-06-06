@@ -76,8 +76,13 @@ func footerBrandPayeeReviewCandidates(text string) []AgentContextCandidate {
 
 func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, []AgentContextCandidate) {
 	lines := strings.Split(text, "\n")
+	footerStartLine := footerBrandContextStartLine(lines)
 	occurrences := map[string][]AgentContextCandidate{}
 	for index, line := range lines {
+		lineNumber := index + 1
+		if lineNumber < footerStartLine {
+			continue
+		}
 		if payeeLinePattern.MatchString(line) || customerDetailLinePattern.MatchString(line) {
 			continue
 		}
@@ -88,7 +93,7 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 		occurrences[candidate] = append(occurrences[candidate], AgentContextCandidate{
 			Value:    candidate,
 			Evidence: strings.TrimSpace(line),
-			Line:     index + 1,
+			Line:     lineNumber,
 		})
 	}
 
@@ -112,6 +117,21 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 		candidates = appendUniqueAgentCandidate(candidates, candidate)
 	}
 	return candidates, reviewCandidates
+}
+
+func footerBrandContextStartLine(lines []string) int {
+	startLine := 1
+	for index, line := range lines {
+		switch {
+		case paymentInstructionLine(line),
+			amountDueLinePattern.MatchString(line),
+			amountLinePattern.MatchString(line),
+			referenceLinePattern.MatchString(line),
+			structuredRefPattern.MatchString(line):
+			startLine = index + 2
+		}
+	}
+	return startLine
 }
 
 func footerBrandBankAdjacent(lines []string, matches []AgentContextCandidate) bool {

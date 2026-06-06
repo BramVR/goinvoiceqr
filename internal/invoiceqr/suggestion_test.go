@@ -254,22 +254,45 @@ Reference: INV-2026-001
 }
 
 func TestSuggestPaymentDetailsFromTextReportsAmbiguousPaymentInstructionAmounts(t *testing.T) {
-	report, err := SuggestPaymentDetailsReportFromText(`
+	tests := []struct {
+		name string
+		text string
+	}{
+		{
+			name: "separate lines",
+			text: `
 Payee: ACME BV
 IBAN: BE68 5390 0754 7034
 Please pay EUR 86.36
 Gelieve € 42,50 te betalen
 Reference: INV-2026-001
-`, PaymentDetails{})
+`,
+		},
+		{
+			name: "same line",
+			text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Please pay EUR 86.36 or pay 42,50 EUR
+Reference: INV-2026-001
+`,
+		},
+	}
 
-	if err == nil {
-		t.Fatalf("expected amount ambiguity")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "amount") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
-		t.Fatalf("expected amount ambiguity, got %v", err)
-	}
-	if report.Amount.Value != "" || len(report.AgentContext.Candidates.Amount) != 2 {
-		t.Fatalf("expected ambiguous payment instruction candidates, report=%+v", report)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(tt.text, PaymentDetails{})
+
+			if err == nil {
+				t.Fatalf("expected amount ambiguity")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "amount") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
+				t.Fatalf("expected amount ambiguity, got %v", err)
+			}
+			if report.Amount.Value != "" || len(report.AgentContext.Candidates.Amount) != 2 {
+				t.Fatalf("expected ambiguous payment instruction candidates, report=%+v", report)
+			}
+		})
 	}
 }
 

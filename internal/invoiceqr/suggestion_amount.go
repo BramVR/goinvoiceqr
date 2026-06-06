@@ -113,11 +113,8 @@ func findPaymentInstructionAmountCandidatesInLine(line string) []string {
 				candidates = append(candidates, trimPaymentInstructionAmountCandidate(match[1]))
 			}
 		}
-		if len(candidates) > 0 {
-			return candidates
-		}
 	}
-	return nil
+	return candidates
 }
 
 func trimPaymentInstructionAmountCandidate(candidate string) string {

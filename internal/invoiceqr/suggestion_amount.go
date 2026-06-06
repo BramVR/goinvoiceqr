@@ -19,7 +19,7 @@ var (
 	signedAmountPattern                   = regexp.MustCompile(`(?i)(?:EUR|€)` + currencyWhitespacePatternText + `-` + currencyWhitespacePatternText + amountTokenPatternText + `|(?:^|[:\p{Zs}\t])-` + currencyWhitespacePatternText + amountTokenPatternText + `|(?:EUR|€)` + currencyWhitespacePatternText + `\(` + currencyWhitespacePatternText + amountTokenPatternText + currencyWhitespacePatternText + `\)|(?:^|[:\p{Zs}\t])\(` + currencyWhitespacePatternText + `(?:EUR|€)?` + currencyWhitespacePatternText + amountTokenPatternText + currencyWhitespacePatternText + `\)`)
 	paymentInstructionAmountPatterns      = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)`),
-		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)\b`),
+		regexp.MustCompile(`(?i)\b(?:please\s+)?pay\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR\b|€)`),
 		regexp.MustCompile(`(?i)\bgelieve\s+(?:EUR|€)` + currencyWhitespacePatternText + `(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `te\s+betalen\b`),
 		regexp.MustCompile(`(?i)\bgelieve\s+(` + amountTokenPatternText + `)` + currencyWhitespacePatternText + `(?:EUR|€)` + currencyWhitespacePatternText + `te\s+betalen\b`),
 	}

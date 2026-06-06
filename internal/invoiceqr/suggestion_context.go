@@ -210,11 +210,22 @@ func agentContextPayableTotalAmountCandidates(text string) []AgentContextCandida
 }
 
 func agentContextGenericAmountCandidates(text string) []AgentContextCandidate {
+	return agentContextGenericAmountCandidatesWithPayable(text, true)
+}
+
+func agentContextConflictingGenericAmountCandidates(text string) []AgentContextCandidate {
+	return agentContextGenericAmountCandidatesWithPayable(text, false)
+}
+
+func agentContextGenericAmountCandidatesWithPayable(text string, includePayable bool) []AgentContextCandidate {
 	lines := strings.Split(text, "\n")
 	candidates := []AgentContextCandidate{}
 	seen := map[string]bool{}
 	for index, line := range lines {
-		if amountDueLinePattern.MatchString(line) || !amountLinePattern.MatchString(line) {
+		if !includePayable && amountDueLinePattern.MatchString(line) {
+			continue
+		}
+		if !amountLinePattern.MatchString(line) {
 			continue
 		}
 		for _, value := range findAmountCandidatesInLine(line) {

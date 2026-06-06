@@ -43,7 +43,7 @@ func suggestionAmountEvidenceFromText(text string) []suggestionEvidence {
 	if paymentInstructionCandidates := agentContextPaymentInstructionAmountCandidates(text); len(paymentInstructionCandidates) > 0 {
 		evidence := appendAgentContextEvidence(nil, "amount", paymentInstructionCandidates, suggestionEvidenceStatusCandidate, "")
 		if selectedAmount, ok := singleNormalizedAmount(paymentInstructionCandidates); ok {
-			conflicts := conflictingAmountCandidates(agentContextGenericAmountCandidates(text), selectedAmount)
+			conflicts := conflictingAmountCandidates(agentContextConflictingGenericAmountCandidates(text), selectedAmount)
 			evidence = appendAgentContextEvidence(evidence, "amount", conflicts, suggestionEvidenceStatusReview, "conflicting_generic_total")
 		}
 		return evidence

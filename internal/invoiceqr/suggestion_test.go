@@ -117,6 +117,7 @@ func TestSuggestPaymentDetailsFromTextFindsPaymentInstructionAmount(t *testing.T
 	}{
 		{name: "dutch", line: "Gelieve € 86,36 te betalen"},
 		{name: "english", line: "Please pay EUR 86.36"},
+		{name: "english euro after", line: "Please pay 86,36 €"},
 	}
 
 	for _, tt := range tests {
@@ -193,6 +194,22 @@ Reference: INV-2026-001
 				t.Fatalf("expected payable-total amount candidate, got %+v", report.AgentContext.Candidates.Amount)
 			}
 		})
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextUsesBarePayableTotalAmount(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Total amount to pay 15,00
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Amount != "15.00" {
+		t.Fatalf("amount = %q, want 15.00", suggestion.Amount)
 	}
 }
 

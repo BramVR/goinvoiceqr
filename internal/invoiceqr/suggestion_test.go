@@ -994,6 +994,50 @@ IBAN BE68 5390 0754 7034
 	}
 }
 
+func TestSuggestPaymentDetailsReportDoesNotSelectCustomerNameLabelAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+Customer Name: Jane Customer BV
+VAT BE 0123.456.789
+Customer Name: Jane Customer BV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for customer name label, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsPayNamedFooterBrandPayee(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+Payment Services BV
+VAT BE 0123.456.789
+Payment Services BV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Payment Services BV" {
+		t.Fatalf("payee = %q, want Payment Services BV", suggestion.Payee)
+	}
+}
+
 func TestBuildSuggestedPaymentArtifactPlanOmitsPlanForAmbiguousFooterBrandPayees(t *testing.T) {
 	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
 		Text: `

@@ -136,16 +136,20 @@ func prioritizedFieldEvidence(field string, evidence []suggestionEvidence) []sug
 	}
 	prioritized := []suggestionEvidence{}
 	for _, item := range evidence {
-		if item.Field == field && item.Kind == string(StructuredReference) {
+		if item.Field == field && structuredReferenceEvidence(item) {
 			prioritized = append(prioritized, item)
 		}
 	}
 	for _, item := range evidence {
-		if item.Field == field && item.Kind != string(StructuredReference) {
+		if item.Field == field && !structuredReferenceEvidence(item) {
 			prioritized = append(prioritized, item)
 		}
 	}
 	return prioritized
+}
+
+func structuredReferenceEvidence(evidence suggestionEvidence) bool {
+	return evidence.Kind == string(StructuredReference) || structuredRefPattern.MatchString(evidence.Value)
 }
 
 func selectedEvidenceValue(evidence suggestionEvidence) string {

@@ -360,6 +360,32 @@ Reference: INV-2026-001
 	}
 }
 
+func TestBuildSuggestedPaymentArtifactPlanFailsClosedOnMalformedStructuredReference(t *testing.T) {
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Invoice: INV-2026-001
+Payment message +++123/4567/89003+++
+`,
+		Output: QROutputOptions{Out: "invoice.qr", Format: "svg"},
+	})
+
+	if err == nil {
+		t.Fatalf("expected malformed structured reference error")
+	}
+	if !result.HasReport || result.HasPlan {
+		t.Fatalf("expected report without plan, got %+v", result)
+	}
+	if result.Report.Reference.Value != "+++123/4567/89003+++" {
+		t.Fatalf("reference suggestion = %q, want malformed structured reference", result.Report.Reference.Value)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "reference") {
+		t.Fatalf("expected reference validation error, got %v", err)
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextFindsPayeeFromCreditorIBANLine(t *testing.T) {
 	suggestion, err := SuggestPaymentDetailsFromText(`
 Total amount to pay

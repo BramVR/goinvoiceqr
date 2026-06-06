@@ -194,6 +194,12 @@ func TestSuggestPaymentDetailsReportIncludesAgentContext(t *testing.T) {
 		referenceCandidates[0].Kind != "structured" || referenceCandidates[0].Line != 7 {
 		t.Fatalf("unexpected reference candidates: %+v", referenceCandidates)
 	}
+	if len(report.AgentContext.ReviewCandidates.Payee) != 0 ||
+		len(report.AgentContext.ReviewCandidates.IBAN) != 0 ||
+		len(report.AgentContext.ReviewCandidates.Amount) != 0 ||
+		len(report.AgentContext.ReviewCandidates.Reference) != 0 {
+		t.Fatalf("expected no review candidates for current behavior, got %+v", report.AgentContext.ReviewCandidates)
+	}
 }
 
 func TestSuggestPaymentDetailsReportIncludesPaymentInstructionCompounds(t *testing.T) {
@@ -221,6 +227,43 @@ func TestSuggestPaymentDetailsReportIncludesPaymentInstructionCompounds(t *testi
 		Line: 6,
 		Text: "betalingsgegevens vindt u hieronder",
 	})
+}
+
+func TestSuggestionEvidenceSelectorKeepsReviewEvidenceOutOfSelectedDetails(t *testing.T) {
+	selection := selectSuggestionEvidence([]suggestionEvidence{
+		{
+			Field:    "payee",
+			Value:    "ACME BV",
+			Evidence: "Payee: ACME BV",
+			Line:     1,
+			Status:   suggestionEvidenceStatusCandidate,
+		},
+		{
+			Field:        "amount",
+			Value:        "EUR 42.50",
+			Normalized:   "42.50",
+			Evidence:     "Total: EUR 42.50",
+			Line:         2,
+			Status:       suggestionEvidenceStatusReview,
+			ReviewReason: "conflicting_generic_total",
+		},
+	}, PaymentDetails{})
+
+	if selection.Details.Payee != "ACME BV" || selection.Payee.Evidence != "Payee: ACME BV" {
+		t.Fatalf("unexpected selected payee: %+v", selection.Payee)
+	}
+	if selection.Details.Amount != "" || len(selection.Issues) != 3 {
+		t.Fatalf("expected review amount not to satisfy required field, selection=%+v", selection)
+	}
+	if len(selection.ReviewCandidates.Amount) != 1 {
+		t.Fatalf("expected amount review candidate, got %+v", selection.ReviewCandidates)
+	}
+	candidate := selection.ReviewCandidates.Amount[0]
+	if candidate.Value != "EUR 42.50" || candidate.Normalized != "42.50" ||
+		candidate.Evidence != "Total: EUR 42.50" || candidate.Line != 2 ||
+		candidate.Reason != "conflicting_generic_total" {
+		t.Fatalf("unexpected review candidate: %+v", candidate)
+	}
 }
 
 func TestAgentContextPayeeCandidateCleansLabeledIBANLine(t *testing.T) {
@@ -314,6 +357,32 @@ Reference: INV-2026-001
 	}
 	if !strings.Contains(err.Error(), "amount") {
 		t.Fatalf("expected amount validation error, got %v", err)
+	}
+}
+
+func TestBuildSuggestedPaymentArtifactPlanFailsClosedOnMalformedStructuredReference(t *testing.T) {
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text: `
+Payee: ACME BV
+IBAN: BE68 5390 0754 7034
+Amount: EUR 42.50
+Invoice: INV-2026-001
+Payment message +++123/4567/89003+++
+`,
+		Output: QROutputOptions{Out: "invoice.qr", Format: "svg"},
+	})
+
+	if err == nil {
+		t.Fatalf("expected malformed structured reference error")
+	}
+	if !result.HasReport || result.HasPlan {
+		t.Fatalf("expected report without plan, got %+v", result)
+	}
+	if result.Report.Reference.Value != "+++123/4567/89003+++" {
+		t.Fatalf("reference suggestion = %q, want malformed structured reference", result.Report.Reference.Value)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "reference") {
+		t.Fatalf("expected reference validation error, got %v", err)
 	}
 }
 

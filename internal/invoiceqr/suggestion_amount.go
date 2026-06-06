@@ -22,52 +22,6 @@ var (
 const amountTokenPatternText = `[0-9](?:[0-9.,\p{Zs}\t]*[0-9])?`
 const currencyWhitespacePatternText = `[\s\p{Zs}]*`
 
-func findAmountCandidates(text string) []string {
-	if values := findAmountCandidatesNearLines(text, amountDueLinePattern, true); len(values) > 0 {
-		return values
-	}
-	return findAmountCandidatesNearLines(text, amountLinePattern, false)
-}
-
-func findAmountCandidatesNearLines(text string, pattern *regexp.Regexp, allowNextLine bool) []string {
-	lines := strings.Split(text, "\n")
-	values := []string{}
-	seen := map[string]bool{}
-	for index, line := range lines {
-		if !pattern.MatchString(line) {
-			continue
-		}
-		candidates := findAmountCandidatesInLine(line)
-		if allowNextLine {
-			candidates = findPreferredAmountCandidatesInLine(line)
-			if len(candidates) == 0 {
-				candidates = findAmountCandidatesOnNextNonEmptyLine(lines, index)
-			}
-		}
-		for _, candidate := range candidates {
-			normalized, err := normalizeSuggestedAmount(candidate)
-			if err != nil {
-				continue
-			}
-			if !seen[normalized] {
-				seen[normalized] = true
-				values = append(values, normalized)
-			}
-		}
-	}
-	return values
-}
-
-func findAmountCandidatesOnNextNonEmptyLine(lines []string, index int) []string {
-	for _, line := range lines[index+1:] {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		return findStandaloneCurrencyAmountCandidatesInLine(line)
-	}
-	return nil
-}
-
 func findPreferredAmountCandidatesInLine(line string) []string {
 	if candidates := findCurrencyAmountCandidatesInLine(line); len(candidates) > 0 {
 		return candidates

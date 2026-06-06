@@ -10,10 +10,11 @@ import (
 var paymentInstructionPattern = regexp.MustCompile(`(?i)\b(?:pay|payments?|payable|betaal\w*|betal\w*)\b`)
 
 type AgentContext struct {
-	SourceTextHash string
-	FullText       string
-	ObservedLines  []AgentContextObservedLine
-	Candidates     AgentContextCandidates
+	SourceTextHash   string
+	FullText         string
+	ObservedLines    []AgentContextObservedLine
+	Candidates       AgentContextCandidates
+	ReviewCandidates AgentContextCandidates
 }
 
 type AgentContextObservedLine struct {
@@ -35,19 +36,16 @@ type AgentContextCandidate struct {
 	Evidence   string
 	Line       int
 	Kind       string
+	Reason     string
 }
 
-func buildAgentContext(text string, includeFullText bool) AgentContext {
+func buildAgentContext(text string, includeFullText bool, candidates, reviewCandidates AgentContextCandidates) AgentContext {
 	hash := sha256.Sum256([]byte(text))
 	context := AgentContext{
-		SourceTextHash: fmt.Sprintf("sha256:%x", hash),
-		ObservedLines:  agentContextObservedLines(text),
-		Candidates: AgentContextCandidates{
-			Payee:     agentContextPayeeCandidates(text),
-			IBAN:      agentContextIBANCandidates(text),
-			Amount:    agentContextAmountCandidates(text),
-			Reference: agentContextReferenceCandidates(text),
-		},
+		SourceTextHash:   fmt.Sprintf("sha256:%x", hash),
+		ObservedLines:    agentContextObservedLines(text),
+		Candidates:       candidates,
+		ReviewCandidates: reviewCandidates,
 	}
 	if includeFullText {
 		context.FullText = text

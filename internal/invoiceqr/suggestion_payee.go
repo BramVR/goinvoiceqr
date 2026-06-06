@@ -14,25 +14,6 @@ var (
 	legalEntityNamePattern       = regexp.MustCompile(`(?i)^(.+?\b(?:B\.V\.|BVBA|BV|N\.V\.|NV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL))(?:\s|$)`)
 )
 
-func findPayeeCandidates(text string) []string {
-	explicit := []string{}
-	inferred := []string{}
-	for _, line := range strings.Split(text, "\n") {
-		if match := payeeLinePattern.FindStringSubmatch(line); len(match) > 1 {
-			if creditor, ok := findCreditorIBANLinePayee(line); ok {
-				explicit = appendUnique(explicit, creditor)
-				continue
-			}
-			explicit = appendUnique(explicit, strings.TrimSpace(match[1]))
-			continue
-		}
-		if creditor, ok := findCreditorIBANLinePayee(line); ok {
-			inferred = appendUnique(inferred, creditor)
-		}
-	}
-	return append(explicit, inferred...)
-}
-
 func findCreditorIBANLinePayee(line string) (string, bool) {
 	ibanLocation := creditorIBANMarkerPattern.FindStringIndex(line)
 	if ibanLocation == nil {

@@ -767,6 +767,34 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsReportDoesNotUseCustomerDetailIBANLineAsPayee(t *testing.T) {
+	for _, line := range []string{
+		"Name: Jane Customer BV - Main street 1 - IBAN BE68 5390 0754 7034",
+		"Customer: Jane Customer BV - Main street 1 - IBAN BE68 5390 0754 7034",
+	} {
+		t.Run(line, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(`
+`+line+`
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err == nil {
+				t.Fatalf("expected missing payee")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+				t.Fatalf("expected payee required error, got %v", err)
+			}
+			if report.Payee.Value != "" {
+				t.Fatalf("expected no selected payee, got %+v", report.Payee)
+			}
+			if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+				t.Fatalf("expected no payee candidates for customer detail IBAN line, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+			}
+		})
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextPrefersExplicitPayeeOverInferredIBANLine(t *testing.T) {
 	suggestion, err := SuggestPaymentDetailsFromText(`
 ACME Collections BV - Main street 1 - IBAN BE68 5390 0754 7034

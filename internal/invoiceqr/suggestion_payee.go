@@ -18,6 +18,9 @@ var (
 )
 
 func findCreditorIBANLinePayee(line string) (string, bool) {
+	if customerDetailLinePattern.MatchString(line) {
+		return "", false
+	}
 	ibanLocation := creditorIBANMarkerPattern.FindStringIndex(line)
 	if ibanLocation == nil {
 		return "", false

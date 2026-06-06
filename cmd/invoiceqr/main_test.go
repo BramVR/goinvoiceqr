@@ -1413,6 +1413,9 @@ func TestFromTextDryRunJSONEcopowerAgentContextRecovery(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			Suggestions struct {
+				Payee struct {
+					Value string `json:"value"`
+				} `json:"payee"`
 				IBAN struct {
 					Value string `json:"value"`
 				} `json:"iban"`
@@ -1443,8 +1446,11 @@ func TestFromTextDryRunJSONEcopowerAgentContextRecovery(t *testing.T) {
 	if incomplete.Data.Suggestions.Reference.Value != "+++123/4567/89002+++" {
 		t.Fatalf("expected Belgian Structured Reference suggestion, got %+v", incomplete.Data.Suggestions.Reference)
 	}
-	if !stringSliceContains(incomplete.Data.MissingFields, "payee") || !stringSliceContains(incomplete.Data.MissingFields, "amount") {
-		t.Fatalf("expected missing payee and amount, got %v", incomplete.Data.MissingFields)
+	if incomplete.Data.Suggestions.Payee.Value != "Ecopower cv" {
+		t.Fatalf("expected recovered payee suggestion, got %+v", incomplete.Data.Suggestions.Payee)
+	}
+	if stringSliceContains(incomplete.Data.MissingFields, "payee") || !stringSliceContains(incomplete.Data.MissingFields, "amount") {
+		t.Fatalf("expected only amount missing, got %v", incomplete.Data.MissingFields)
 	}
 	if !observedLineContains(incomplete.Data.AgentContext.ObservedLines, "payment_instruction", "Gelieve het bedrag te betalen") {
 		t.Fatalf("expected payment instruction in Agent Context, got %+v", incomplete.Data.AgentContext.ObservedLines)

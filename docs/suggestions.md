@@ -55,13 +55,16 @@ Explicit flags use `source: "override"` and omit `evidence`.
   "candidates": {
     "payee": [{ "value": "ACME BV", "evidence": "Payee: ACME BV", "line": 1 }],
     "iban": [{ "value": "BE68 5390 0754 7034", "normalized": "BE68539007547034", "evidence": "IBAN: BE68 5390 0754 7034", "line": 2 }],
-    "amount": [{ "value": "EUR 42.50", "normalized": "42.50", "evidence": "Amount: EUR 42.50", "line": 3 }],
+    "amount": [{ "value": "EUR 42.50", "normalized": "42.50", "evidence": "Please pay EUR 42.50", "line": 3, "kind": "payment_instruction" }],
     "reference": [{ "value": "+++123/4567/89002+++", "normalized": "+++123/4567/89002+++", "evidence": "+++123/4567/89002+++", "line": 4, "kind": "structured" }]
+  },
+  "review_candidates": {
+    "amount": [{ "value": "12.00", "normalized": "12.00", "evidence": "Total: EUR 12.00", "line": 8, "kind": "generic_total", "reason": "conflicting_generic_total" }]
   }
 }
 ```
 
-`full_text` is omitted unless `--full-text` is set. Empty candidate groups may be omitted by JSON encoding.
+`full_text` is omitted unless `--full-text` is set. Empty candidate and review candidate groups may be omitted by JSON encoding.
 
 Incomplete suggestions return `success: false`, `error.code: "incomplete_suggestion"`, partial `data.suggestions`, `missing_fields`, `ambiguous_fields`, and Agent Context. They omit `data.plan`. Complete valid suggestions return `success: true` and include `data.plan` with validated Payment Details, EPC data, and output metadata.
 
@@ -74,6 +77,8 @@ Agent Context is evidence for inspection, not approval. A Calling Agent may use 
 ## Amounts
 
 Suggested amounts are parsed as complete numeric tokens. Plain decimals such as `42.50` and `42,50` are accepted, and common thousands formats such as `1.234,56`, `1,234.56`, and `1 234,56` normalize to `1234.56`. Regular, non-breaking, and narrow non-breaking spaces are accepted as grouping whitespace.
+
+Payment instruction lines such as `Please pay EUR 42.50` and `Gelieve € 42,50 te betalen` are preferred before payable-total labels and generic amount or total labels. Multiple differing payment-instruction amounts are ambiguous. When one payment-instruction amount is selected, conflicting generic totals are exposed as `review_candidates.amount` with `reason: "conflicting_generic_total"` instead of making the selected amount ambiguous.
 
 When PDF text extraction splits table cells across lines, a preferred label such as `Total amount to pay` may use the next non-empty currency-bearing line as its amount candidate. Preferred amount labels are used before generic `Total` lines so detail-table totals do not make the payable amount ambiguous.
 

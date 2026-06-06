@@ -20,6 +20,7 @@ Read when using `invoiceqr` from an agent, automation, or scripted workflow, or 
 - `generate --json` is the real Manual Payment Details QR write path. Without `--yes`, confirmation text is written to stderr so stdout stays parseable JSON.
 - `from-text --dry-run --json` and `from-pdf --dry-run --json` print Suggested Payment Details with `value`, `source`, and `evidence`, plus compact Agent Context for inspection.
 - Incomplete suggestion dry-runs may return `success: false` with partial `data`; agents should inspect missing or ambiguous fields and call the CLI again with explicit overrides.
+- Successful suggestion dry-runs may include `agent_context.review_candidates` for lower-priority evidence that conflicts with the selected suggestion and should be shown or inspected, not treated as approval.
 - Suggested Payment Details from text, PDF, OCR, AI, or a Calling Agent still require explicit confirmation before QR output.
 - Do not treat evidence snippets, Agent Context, successful validation, or a Payment Artifact Plan as user approval.
 
@@ -69,9 +70,10 @@ Recovery loop for a Calling Agent:
 
 1. Run `from-text` or `from-pdf` with `--dry-run --json`.
 2. If `success` is `false` and `error.code` is `incomplete_suggestion`, inspect `data.missing_fields`, `data.ambiguous_fields`, `data.suggestions`, and `data.agent_context`.
-3. Infer only explicit override values from the evidence; do not treat Agent Context as approval.
-4. Re-run the same dry-run with overrides such as `--payee`, `--amount`, `--iban`, or `--reference`.
-5. Show the resulting Payment Details and plan to the user before any non-dry-run QR write.
+3. If `data.agent_context.review_candidates` is present, treat it as conflicting lower-priority evidence to review alongside the selected suggestion.
+4. Infer only explicit override values from the evidence; do not treat Agent Context as approval.
+5. Re-run the same dry-run with overrides such as `--payee`, `--amount`, `--iban`, or `--reference`.
+6. Show the resulting Payment Details and plan to the user before any non-dry-run QR write.
 
 Incomplete suggestion JSON still has partial `data`:
 

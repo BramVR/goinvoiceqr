@@ -7,14 +7,20 @@ import (
 )
 
 var (
-	payeeLinePattern             = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|name|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
+	payeeLinePattern             = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
 	creditorIBANLineLabelPattern = regexp.MustCompile(`(?i)^\s*(?:creditor|payee|beneficiary|supplier|begunstigde|leverancier)\s*:\s*`)
 	creditorIBANMarkerPattern    = regexp.MustCompile(`(?i)\bIBAN\b\s*:?\s*[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
-	legalEntitySuffixPattern     = regexp.MustCompile(`(?i)(?:^|\s)(?:B\.V\.|BVBA|BV|N\.V\.|NV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL)$`)
-	legalEntityNamePattern       = regexp.MustCompile(`(?i)^(.+?\b(?:B\.V\.|BVBA|BV|N\.V\.|NV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL))(?:\s|$)`)
+	customerDetailLinePattern    = regexp.MustCompile(`(?i)^\s*(?:name|customer(?:\s+name)?|client(?:\s+name)?|billing(?:\s+name)?|delivery(?:\s+name)?|ship(?:ped)?\s*to|bill(?:ed)?\s*to|invoice\s*to|klant|naam)\s*:`)
+	customerSectionLinePattern   = regexp.MustCompile(`(?i)^\s*(?:customer|client|billing|delivery|shipping|ship(?:ped)?\s*to|bill(?:ed)?\s*to|invoice\s*to|klant)(?:\s+(?:details|information|info|gegevens|data))?\s*:?\s*$`)
+	legalEntitySuffixPattern     = regexp.MustCompile(`(?i)(?:^|\s)(?:B\.V\.|BVBA|BV|N\.V\.|NV|CV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL)$`)
+	legalEntityNamePattern       = regexp.MustCompile(`(?i)^(.+?\b(?:B\.V\.|BVBA|BV|N\.V\.|NV|CV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL))(?:\s|$)`)
+	footerBrandAdjacentPattern   = regexp.MustCompile(`(?i)\b(?:IBAN|BIC|VAT|BTW|TVA|BE\s*\d{4}[.\s]?\d{3}[.\s]?\d{3})\b|@|https?://|www\.|\b(?:tel|phone|email|mail)\b`)
 )
 
 func findCreditorIBANLinePayee(line string) (string, bool) {
+	if customerDetailLinePattern.MatchString(line) {
+		return "", false
+	}
 	ibanLocation := creditorIBANMarkerPattern.FindStringIndex(line)
 	if ibanLocation == nil {
 		return "", false
@@ -60,4 +66,117 @@ func creditorIBANLineSegments(prefix string) []string {
 
 func creditorIBANDash(r rune) bool {
 	return r == '-' || r == '–' || r == '—'
+}
+
+func footerBrandPayeeCandidates(text string) []AgentContextCandidate {
+	selectable, _ := footerBrandPayeeCandidatesByStatus(text)
+	return selectable
+}
+
+func footerBrandPayeeReviewCandidates(text string) []AgentContextCandidate {
+	_, review := footerBrandPayeeCandidatesByStatus(text)
+	return review
+}
+
+func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, []AgentContextCandidate) {
+	lines := strings.Split(text, "\n")
+	footerStartLine, ok := footerBrandContextStartLine(lines)
+	if !ok {
+		return nil, nil
+	}
+	occurrences := map[string][]AgentContextCandidate{}
+	order := []string{}
+	inCustomerSection := false
+	for index, line := range lines {
+		lineNumber := index + 1
+		if lineNumber < footerStartLine {
+			continue
+		}
+		if footerBrandCustomerContextLine(line) {
+			inCustomerSection = true
+			continue
+		}
+		if payeeLinePattern.MatchString(line) {
+			continue
+		}
+		if footerBrandContextResetLine(line) {
+			inCustomerSection = false
+		}
+		if inCustomerSection {
+			continue
+		}
+		candidate, ok := legalEntityNameCandidate(line)
+		if !ok {
+			continue
+		}
+		if len(occurrences[candidate]) == 0 {
+			order = append(order, candidate)
+		}
+		occurrences[candidate] = append(occurrences[candidate], AgentContextCandidate{
+			Value:    candidate,
+			Evidence: strings.TrimSpace(line),
+			Line:     lineNumber,
+		})
+	}
+
+	candidates := []AgentContextCandidate{}
+	reviewCandidates := []AgentContextCandidate{}
+	for _, value := range order {
+		matches := occurrences[value]
+		if !footerBrandBankAdjacent(lines, matches) {
+			continue
+		}
+		candidate := AgentContextCandidate{
+			Value:    value,
+			Evidence: matches[0].Evidence,
+			Line:     matches[0].Line,
+			Kind:     "footer_brand",
+		}
+		if len(matches) < 2 {
+			candidate.Reason = "weak_footer_brand"
+			reviewCandidates = appendUniqueAgentCandidate(reviewCandidates, candidate)
+			continue
+		}
+		candidates = appendUniqueAgentCandidate(candidates, candidate)
+	}
+	return candidates, reviewCandidates
+}
+
+func footerBrandContextStartLine(lines []string) (int, bool) {
+	for index, line := range lines {
+		if footerBrandContextBoundaryLine(line) {
+			return index + 2, true
+		}
+	}
+	return 0, false
+}
+
+func footerBrandContextBoundaryLine(line string) bool {
+	if amountDueLinePattern.MatchString(line) || len(findPaymentInstructionAmountCandidatesInLine(line)) > 0 {
+		return true
+	}
+	return false
+}
+
+func footerBrandCustomerContextLine(line string) bool {
+	return customerDetailLinePattern.MatchString(line) || customerSectionLinePattern.MatchString(line)
+}
+
+func footerBrandContextResetLine(line string) bool {
+	return footerBrandContextBoundaryLine(line) || referenceLinePattern.MatchString(line) || structuredRefPattern.MatchString(line)
+}
+
+func footerBrandBankAdjacent(lines []string, matches []AgentContextCandidate) bool {
+	for _, match := range matches {
+		index := match.Line - 1
+		for adjacent := index - 1; adjacent <= index+1; adjacent++ {
+			if adjacent < 0 || adjacent >= len(lines) || adjacent == index {
+				continue
+			}
+			if footerBrandAdjacentPattern.MatchString(lines[adjacent]) {
+				return true
+			}
+		}
+	}
+	return false
 }

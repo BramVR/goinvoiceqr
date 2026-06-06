@@ -767,6 +767,34 @@ Reference: INV-2026-001
 	}
 }
 
+func TestSuggestPaymentDetailsReportDoesNotUseCustomerDetailIBANLineAsPayee(t *testing.T) {
+	for _, line := range []string{
+		"Name: Jane Customer BV - Main street 1 - IBAN BE68 5390 0754 7034",
+		"Customer: Jane Customer BV - Main street 1 - IBAN BE68 5390 0754 7034",
+	} {
+		t.Run(line, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(`
+`+line+`
+Amount: EUR 42.50
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+			if err == nil {
+				t.Fatalf("expected missing payee")
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+				t.Fatalf("expected payee required error, got %v", err)
+			}
+			if report.Payee.Value != "" {
+				t.Fatalf("expected no selected payee, got %+v", report.Payee)
+			}
+			if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+				t.Fatalf("expected no payee candidates for customer detail IBAN line, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+			}
+		})
+	}
+}
+
 func TestSuggestPaymentDetailsFromTextPrefersExplicitPayeeOverInferredIBANLine(t *testing.T) {
 	suggestion, err := SuggestPaymentDetailsFromText(`
 ACME Collections BV - Main street 1 - IBAN BE68 5390 0754 7034
@@ -780,6 +808,444 @@ Reference: INV-2026-001
 	}
 	if suggestion.Payee != "ACME BV" {
 		t.Fatalf("payee = %q, want ACME BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsRepeatedFooterBrandPayee(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Invoice INV-2026-001
+Customer
+Jane Customer
+Main street 1
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+info@acme.example
+ACME Energy CV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "ACME Energy CV" {
+		t.Fatalf("payee = %q, want ACME Energy CV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextPrefersStrongPayeeOverFooterBrand(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Supplier: Billing Services BV
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+ACME Energy CV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Billing Services BV" {
+		t.Fatalf("payee = %q, want Billing Services BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportKeepsWeakFooterBrandReviewCandidateWithStrongPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Supplier: Billing Services BV
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion report, got %v", err)
+	}
+	if report.Payee.Value != "Billing Services BV" {
+		t.Fatalf("payee = %q, want Billing Services BV", report.Payee.Value)
+	}
+	if len(report.AgentContext.ReviewCandidates.Payee) != 1 {
+		t.Fatalf("expected one payee review candidate, got %+v", report.AgentContext.ReviewCandidates.Payee)
+	}
+	candidate := report.AgentContext.ReviewCandidates.Payee[0]
+	if candidate.Value != "ACME Energy CV" || candidate.Kind != "footer_brand" || candidate.Reason != "weak_footer_brand" {
+		t.Fatalf("unexpected payee review candidate: %+v", candidate)
+	}
+}
+
+func TestSuggestPaymentDetailsReportKeepsWeakFooterBrandAsReviewCandidate(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates, got %+v", report.AgentContext.Candidates.Payee)
+	}
+	if len(report.AgentContext.ReviewCandidates.Payee) != 1 {
+		t.Fatalf("expected one payee review candidate, got %+v", report.AgentContext.ReviewCandidates.Payee)
+	}
+	candidate := report.AgentContext.ReviewCandidates.Payee[0]
+	if candidate.Value != "ACME Energy CV" || candidate.Kind != "footer_brand" || candidate.Reason != "weak_footer_brand" {
+		t.Fatalf("unexpected payee review candidate: %+v", candidate)
+	}
+}
+
+func TestSuggestPaymentDetailsReportMarksDifferingFooterBrandPayeesAmbiguous(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+ACME Energy CV
+info@acme.example
+Billing Services BV
+VAT BE 9876.543.210
+Billing Services BV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected ambiguous payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "ambiguous") {
+		t.Fatalf("expected payee ambiguous error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	candidates := report.AgentContext.Candidates.Payee
+	if len(candidates) != 2 || candidates[0].Value != "ACME Energy CV" || candidates[1].Value != "Billing Services BV" {
+		t.Fatalf("expected stable footer payee candidate order, got %+v", candidates)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotSelectCustomerNameHeaderAsPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Customer details
+Name: Jane Customer BV
+Address: Main street 1
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for customer header, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotSelectRepeatedCustomerNameAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Customer details
+Name: Jane Customer BV
+VAT BE 0123.456.789
+contact@customer.example
+Delivery details
+Name: Jane Customer BV
+VAT BE 0123.456.789
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for repeated customer name, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotSelectRepeatedCustomerLabelAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Billing details
+Customer: Jane Customer BV
+VAT BE 0123.456.789
+contact@customer.example
+Delivery details
+Customer: Jane Customer BV
+VAT BE 0123.456.789
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for repeated customer label, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotSelectBodyCustomerBrandAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Customer details
+Jane Customer BV
+VAT BE 0123.456.789
+contact@customer.example
+Delivery details
+Jane Customer BV
+VAT BE 0123.456.789
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for body customer brand, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotSelectCustomerDetailsAfterAmountAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Customer details
+Jane Customer BV
+VAT BE 0123.456.789
+Delivery details
+Jane Customer BV
+VAT BE 0123.456.789
+Reference: INV-2026-001
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for customer details after amount, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotResetCustomerFooterContextOnIBAN(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+Customer details
+IBAN BE68 5390 0754 7034
+Jane Customer BV
+VAT BE 0123.456.789
+Jane Customer BV
+info@customer.example
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for customer section IBAN, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotSelectCustomerNameLabelAsFooterBrandPayee(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+Customer Name: Jane Customer BV
+VAT BE 0123.456.789
+Customer Name: Jane Customer BV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates for customer name label, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsPayNamedFooterBrandPayee(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+Payment Services BV
+VAT BE 0123.456.789
+Payment Services BV
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Payment Services BV" {
+		t.Fatalf("payee = %q, want Payment Services BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsFromTextFindsFooterBrandBeforeLaterReference(t *testing.T) {
+	suggestion, err := SuggestPaymentDetailsFromText(`
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Payment Services BV
+VAT BE 0123.456.789
+Payment Services BV
+IBAN BE68 5390 0754 7034
+Reference: INV-2026-001
+`, PaymentDetails{})
+
+	if err != nil {
+		t.Fatalf("expected suggestion, got %v", err)
+	}
+	if suggestion.Payee != "Payment Services BV" {
+		t.Fatalf("payee = %q, want Payment Services BV", suggestion.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotUseFooterBrandWithoutTextPaymentMarker(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Customer details
+Jane Customer BV
+VAT BE 0123.456.789
+Delivery details
+Jane Customer BV
+VAT BE 0123.456.789
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{Amount: "42.50", Reference: "INV-2026-001"})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates without text payment marker, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestSuggestPaymentDetailsReportDoesNotUseHeaderReferenceAsFooterMarker(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Reference: PO-123
+Customer details
+Jane Customer BV
+VAT BE 0123.456.789
+Delivery details
+Jane Customer BV
+VAT BE 0123.456.789
+Total amount to pay: EUR 42.50
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{Reference: "INV-2026-001"})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates from header reference, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
+func TestBuildSuggestedPaymentArtifactPlanOmitsPlanForAmbiguousFooterBrandPayees(t *testing.T) {
+	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
+		Text: `
+Invoice INV-2026-001
+Total amount to pay: EUR 42.50
+Reference: INV-2026-001
+ACME Energy CV
+VAT BE 0123.456.789
+ACME Energy CV
+info@acme.example
+Billing Services BV
+VAT BE 9876.543.210
+Billing Services BV
+IBAN BE68 5390 0754 7034
+`,
+		Output: QROutputOptions{Out: "invoice.svg"},
+	})
+
+	if err == nil {
+		t.Fatalf("expected ambiguous payee")
+	}
+	if !result.HasReport || result.HasPlan {
+		t.Fatalf("expected report without plan, got %+v", result)
 	}
 }
 

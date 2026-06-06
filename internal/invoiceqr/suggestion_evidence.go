@@ -32,11 +32,36 @@ type suggestionSelection struct {
 
 func suggestionEvidenceFromText(text string) []suggestionEvidence {
 	evidence := []suggestionEvidence{}
-	evidence = appendAgentContextEvidence(evidence, "payee", agentContextPayeeCandidates(text), suggestionEvidenceStatusCandidate, "")
+	evidence = append(evidence, suggestionPayeeEvidenceFromText(text)...)
 	evidence = appendAgentContextEvidence(evidence, "iban", agentContextIBANCandidates(text), suggestionEvidenceStatusCandidate, "")
 	evidence = append(evidence, suggestionAmountEvidenceFromText(text)...)
 	evidence = appendAgentContextEvidence(evidence, "reference", agentContextReferenceCandidates(text), suggestionEvidenceStatusCandidate, "")
 	return evidence
+}
+
+func suggestionPayeeEvidenceFromText(text string) []suggestionEvidence {
+	payeeCandidates := agentContextPayeeCandidates(text)
+	evidence := appendAgentContextEvidence(nil, "payee", payeeCandidates, suggestionEvidenceStatusCandidate, "")
+	reviewCandidates := payeeReviewCandidatesNotDuplicated(footerBrandPayeeReviewCandidates(text), payeeCandidates)
+	evidence = appendAgentContextEvidence(evidence, "payee", reviewCandidates, suggestionEvidenceStatusReview, "weak_footer_brand")
+	return evidence
+}
+
+func payeeReviewCandidatesNotDuplicated(reviewCandidates, payeeCandidates []AgentContextCandidate) []AgentContextCandidate {
+	selected := map[string]bool{}
+	for _, candidate := range payeeCandidates {
+		if value := strings.TrimSpace(candidate.Value); value != "" {
+			selected[value] = true
+		}
+	}
+	filtered := []AgentContextCandidate{}
+	for _, candidate := range reviewCandidates {
+		if selected[strings.TrimSpace(candidate.Value)] {
+			continue
+		}
+		filtered = appendUniqueAgentCandidate(filtered, candidate)
+	}
+	return filtered
 }
 
 func suggestionAmountEvidenceFromText(text string) []suggestionEvidence {
@@ -111,7 +136,7 @@ func selectSuggestionEvidence(evidence []suggestionEvidence, overrides PaymentDe
 		ReviewCandidates: agentContextCandidatesFromEvidence(evidence, suggestionEvidenceStatusReview),
 	}
 
-	selection.Payee, selection.Details.Payee = selectRequiredField("payee", overrides.Payee, evidence, false, &selection.Issues)
+	selection.Payee, selection.Details.Payee = selectPayeeField(overrides.Payee, evidence, &selection.Issues)
 	selection.IBAN, selection.Details.IBAN = selectRequiredField("iban", overrides.IBAN, evidence, true, &selection.Issues)
 	selection.Amount, selection.Details.Amount = selectRequiredField("amount", overrides.Amount, evidence, true, &selection.Issues)
 	selection.Reference, selection.Details.Reference = selectRequiredField("reference", overrides.Reference, evidence, false, &selection.Issues)
@@ -123,6 +148,52 @@ func selectSuggestionEvidence(evidence []suggestionEvidence, overrides PaymentDe
 	}
 
 	return selection
+}
+
+func selectPayeeField(override string, evidence []suggestionEvidence, issues *[]SuggestionFieldIssue) (SuggestedPaymentField, string) {
+	if strings.TrimSpace(override) != "" {
+		value := strings.TrimSpace(override)
+		return SuggestedPaymentField{Value: value, Source: "override"}, value
+	}
+
+	candidates := selectableEvidence("payee", evidence)
+	if len(candidates) == 0 {
+		*issues = append(*issues, SuggestionFieldIssue{Field: "payee", Reason: "required"})
+		return SuggestedPaymentField{}, ""
+	}
+
+	if selected, ok := firstPayeeEvidence(candidates, explicitPayeeEvidence); ok {
+		value := selectedEvidenceValue(selected)
+		return SuggestedPaymentField{Value: value, Source: "text", Evidence: selected.Evidence}, value
+	}
+	if selected, ok := firstPayeeEvidence(candidates, strongInferredPayeeEvidence); ok {
+		value := selectedEvidenceValue(selected)
+		return SuggestedPaymentField{Value: value, Source: "text", Evidence: selected.Evidence}, value
+	}
+
+	if len(candidates) > 1 {
+		*issues = append(*issues, SuggestionFieldIssue{Field: "payee", Reason: "ambiguous"})
+		return SuggestedPaymentField{}, ""
+	}
+	value := selectedEvidenceValue(candidates[0])
+	return SuggestedPaymentField{Value: value, Source: "text", Evidence: candidates[0].Evidence}, value
+}
+
+func firstPayeeEvidence(candidates []suggestionEvidence, match func(suggestionEvidence) bool) (suggestionEvidence, bool) {
+	for _, candidate := range candidates {
+		if match(candidate) {
+			return candidate, true
+		}
+	}
+	return suggestionEvidence{}, false
+}
+
+func explicitPayeeEvidence(evidence suggestionEvidence) bool {
+	return payeeLinePattern.MatchString(evidence.Evidence)
+}
+
+func strongInferredPayeeEvidence(evidence suggestionEvidence) bool {
+	return evidence.Kind != "footer_brand" && !explicitPayeeEvidence(evidence)
 }
 
 func selectRequiredField(name, override string, evidence []suggestionEvidence, ambiguous bool, issues *[]SuggestionFieldIssue) (SuggestedPaymentField, string) {

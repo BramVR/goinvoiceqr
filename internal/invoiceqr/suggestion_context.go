@@ -85,10 +85,10 @@ func agentContextLineKind(lines []string, index int) string {
 	switch {
 	case index == firstNonEmptyLineIndex(lines) && strings.Contains(strings.ToLower(line), "invoice"):
 		return "document_header"
-	case payeeLinePattern.MatchString(line) || legalEntityNamePattern.MatchString(line):
-		return "payee_context"
 	case strings.Contains(strings.ToLower(line), "iban"):
 		return "iban_context"
+	case payeeLinePattern.MatchString(line) || legalEntityNamePattern.MatchString(line):
+		return "payee_context"
 	case structuredRefPattern.MatchString(line) || referenceLinePattern.MatchString(line):
 		return "reference_context"
 	case amountDueLinePattern.MatchString(line) || amountLinePattern.MatchString(line) || len(findStandaloneCurrencyAmountCandidatesInLine(line)) > 0:
@@ -155,6 +155,9 @@ func agentContextPayeeCandidates(text string) []AgentContextCandidate {
 				Line:     index + 1,
 			})
 		}
+	}
+	for _, candidate := range footerBrandPayeeCandidates(text) {
+		candidates = appendUniqueAgentCandidate(candidates, candidate)
 	}
 	return candidates
 }

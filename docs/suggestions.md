@@ -86,7 +86,9 @@ Malformed grouped values are ignored as amount candidates rather than truncated.
 
 ## Payees
 
-Suggested payees prefer explicit labels such as `Payee:` or `Supplier:`. When an invoice footer combines the creditor name and `IBAN` on one line, the legal-entity name before the address and IBAN may be used as a conservative payee candidate. This creditor-IBAN inference requires an `IBAN` marker followed by an IBAN-shaped value, strips leading creditor/payee labels, and scans dash-separated segments so footer prefixes are ignored without breaking hyphenated legal names.
+Suggested payees prefer explicit labels such as `Payee:` or `Supplier:`. Ambiguous customer-detail labels such as `Name:` are not payee labels. When an invoice footer combines the creditor name and `IBAN` on one line, the legal-entity name before the address and IBAN may be used as a conservative payee candidate. This creditor-IBAN inference requires an `IBAN` marker followed by an IBAN-shaped value, strips leading creditor/payee labels, and scans dash-separated segments so footer prefixes are ignored without breaking hyphenated legal names.
+
+Repeated legal-entity footer brands may become payee candidates when at least one occurrence is adjacent to creditor bank, VAT, or contact details. Footer-brand candidates are weaker than explicit labels and creditor-IBAN-line evidence. Multiple differing footer-brand payees are ambiguous, leaving the suggestion incomplete. A single bank-adjacent footer brand without repetition is exposed as `review_candidates.payee` with `reason: "weak_footer_brand"` instead of selected by default.
 
 ## Stdin Confirmation
 

@@ -112,14 +112,16 @@ Reference: INV-2026-001
 
 func TestSuggestPaymentDetailsFromTextFindsPaymentInstructionAmount(t *testing.T) {
 	tests := []struct {
-		name string
-		line string
+		name   string
+		line   string
+		amount string
 	}{
 		{name: "dutch", line: "Gelieve € 86,36 te betalen"},
 		{name: "english", line: "Please pay EUR 86.36"},
 		{name: "english euro after", line: "Please pay 86,36 €"},
 		{name: "english before date", line: "Please pay EUR 86.36 2026-06-30"},
 		{name: "english before reference", line: "Please pay EUR 86.36 123"},
+		{name: "integer before date", line: "Please pay EUR 1000 2026-06-30", amount: "1000.00"},
 	}
 
 	for _, tt := range tests {
@@ -134,8 +136,12 @@ Reference: INV-2026-001
 			if err != nil {
 				t.Fatalf("expected suggestion, got %v", err)
 			}
-			if suggestion.Amount != "86.36" {
-				t.Fatalf("amount = %q, want 86.36", suggestion.Amount)
+			wantAmount := tt.amount
+			if wantAmount == "" {
+				wantAmount = "86.36"
+			}
+			if suggestion.Amount != wantAmount {
+				t.Fatalf("amount = %q, want %s", suggestion.Amount, wantAmount)
 			}
 		})
 	}
@@ -200,22 +206,34 @@ Reference: INV-2026-001
 }
 
 func TestSuggestPaymentDetailsFromTextDoesNotTruncateMalformedPaymentInstructionAmount(t *testing.T) {
-	report, err := SuggestPaymentDetailsReportFromText(`
+	tests := []struct {
+		name string
+		line string
+	}{
+		{name: "short malformed group", line: "Please pay EUR 12 34"},
+		{name: "mixed malformed group", line: "Please pay EUR 1.234 567"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report, err := SuggestPaymentDetailsReportFromText(`
 Payee: ACME BV
 IBAN: BE68 5390 0754 7034
-Please pay EUR 12 34
+`+tt.line+`
 Total amount to pay: EUR 121.00
 Reference: INV-2026-001
 `, PaymentDetails{})
 
-	if err != nil {
-		t.Fatalf("expected suggestion report, got %v", err)
-	}
-	if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
-		t.Fatalf("unexpected selected amount: %+v", report.Amount)
-	}
-	if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
-		t.Fatalf("expected payable-total fallback, got %+v", report.AgentContext.Candidates.Amount)
+			if err != nil {
+				t.Fatalf("expected suggestion report, got %v", err)
+			}
+			if report.Amount.Value != "121.00" || report.Amount.Evidence != "Total amount to pay: EUR 121.00" {
+				t.Fatalf("unexpected selected amount: %+v", report.Amount)
+			}
+			if len(report.AgentContext.Candidates.Amount) != 1 || report.AgentContext.Candidates.Amount[0].Kind != amountCandidateKindPayableTotal {
+				t.Fatalf("expected payable-total fallback, got %+v", report.AgentContext.Candidates.Amount)
+			}
+		})
 	}
 }
 

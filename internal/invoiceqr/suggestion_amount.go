@@ -141,10 +141,26 @@ func trimTrailingAmountChunk(candidate string) string {
 		return candidate
 	}
 	prefix := trimmed[:index]
-	if !strings.ContainsAny(prefix, ".,") {
+	if _, err := normalizeSuggestedAmount(prefix); err != nil {
+		return candidate
+	}
+	suffix := strings.TrimSpace(trimmed[index:])
+	if !hasDecimalFraction(prefix) && !longDigitToken(suffix) {
 		return candidate
 	}
 	return strings.TrimSpace(prefix)
+}
+
+func hasDecimalFraction(candidate string) bool {
+	index := strings.LastIndexAny(candidate, ".,")
+	if index < 0 {
+		return false
+	}
+	return validFraction(candidate[index+1:])
+}
+
+func longDigitToken(candidate string) bool {
+	return len(candidate) >= 4 && asciiDigits(candidate)
 }
 
 func normalizeSuggestedAmount(input string) (string, error) {

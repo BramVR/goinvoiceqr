@@ -140,7 +140,11 @@ func trimTrailingAmountChunk(candidate string) string {
 	if index < 0 {
 		return candidate
 	}
-	return strings.TrimSpace(trimmed[:index])
+	prefix := trimmed[:index]
+	if !strings.ContainsAny(prefix, ".,") {
+		return candidate
+	}
+	return strings.TrimSpace(prefix)
 }
 
 func normalizeSuggestedAmount(input string) (string, error) {

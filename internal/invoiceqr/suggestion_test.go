@@ -1087,6 +1087,34 @@ IBAN BE68 5390 0754 7034
 	}
 }
 
+func TestSuggestPaymentDetailsReportDoesNotUseHeaderReferenceAsFooterMarker(t *testing.T) {
+	report, err := SuggestPaymentDetailsReportFromText(`
+Invoice INV-2026-001
+Reference: PO-123
+Customer details
+Jane Customer BV
+VAT BE 0123.456.789
+Delivery details
+Jane Customer BV
+VAT BE 0123.456.789
+Total amount to pay: EUR 42.50
+IBAN BE68 5390 0754 7034
+`, PaymentDetails{Reference: "INV-2026-001"})
+
+	if err == nil {
+		t.Fatalf("expected missing payee")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "payee") || !strings.Contains(strings.ToLower(err.Error()), "required") {
+		t.Fatalf("expected payee required error, got %v", err)
+	}
+	if report.Payee.Value != "" {
+		t.Fatalf("expected no selected payee, got %+v", report.Payee)
+	}
+	if len(report.AgentContext.Candidates.Payee) != 0 || len(report.AgentContext.ReviewCandidates.Payee) != 0 {
+		t.Fatalf("expected no payee candidates from header reference, got candidates=%+v review=%+v", report.AgentContext.Candidates.Payee, report.AgentContext.ReviewCandidates.Payee)
+	}
+}
+
 func TestBuildSuggestedPaymentArtifactPlanOmitsPlanForAmbiguousFooterBrandPayees(t *testing.T) {
 	result, err := BuildSuggestedPaymentArtifactPlan(SuggestedPaymentArtifactPlanOptions{
 		Text: `

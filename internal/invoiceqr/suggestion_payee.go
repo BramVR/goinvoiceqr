@@ -137,11 +137,10 @@ func footerBrandContextStartLine(lines []string) (int, bool) {
 }
 
 func footerBrandContextBoundaryLine(line string) bool {
-	if amountDueLinePattern.MatchString(line) || amountLinePattern.MatchString(line) || structuredRefPattern.MatchString(line) {
+	if amountDueLinePattern.MatchString(line) || len(findPaymentInstructionAmountCandidatesInLine(line)) > 0 {
 		return true
 	}
-	trimmed := strings.ToLower(strings.TrimSpace(line))
-	return !strings.HasPrefix(trimmed, "invoice") && referenceLinePattern.MatchString(line)
+	return false
 }
 
 func footerBrandBankAdjacent(lines []string, matches []AgentContextCandidate) bool {

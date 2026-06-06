@@ -55,7 +55,7 @@ Explicit flags use `source: "override"` and omit `evidence`.
   "candidates": {
     "payee": [{ "value": "ACME BV", "evidence": "Payee: ACME BV", "line": 1 }],
     "iban": [{ "value": "BE68 5390 0754 7034", "normalized": "BE68539007547034", "evidence": "IBAN: BE68 5390 0754 7034", "line": 2 }],
-    "amount": [{ "value": "EUR 42.50", "normalized": "42.50", "evidence": "Please pay EUR 42.50", "line": 3, "kind": "payment_instruction" }],
+    "amount": [{ "value": "42.50", "normalized": "42.50", "evidence": "Please pay EUR 42.50", "line": 3, "kind": "payment_instruction" }],
     "reference": [{ "value": "+++123/4567/89002+++", "normalized": "+++123/4567/89002+++", "evidence": "+++123/4567/89002+++", "line": 4, "kind": "structured" }]
   },
   "review_candidates": {

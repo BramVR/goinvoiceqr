@@ -110,7 +110,7 @@ func findPaymentInstructionAmountCandidatesInLine(line string) []string {
 	for _, pattern := range paymentInstructionAmountPatterns {
 		for _, match := range pattern.FindAllStringSubmatch(line, -1) {
 			if len(match) > 1 && match[1] != "" {
-				candidates = append(candidates, match[1])
+				candidates = append(candidates, trimPaymentInstructionAmountCandidate(match[1]))
 			}
 		}
 		if len(candidates) > 0 {
@@ -118,6 +118,29 @@ func findPaymentInstructionAmountCandidatesInLine(line string) []string {
 		}
 	}
 	return nil
+}
+
+func trimPaymentInstructionAmountCandidate(candidate string) string {
+	candidate = strings.TrimSpace(candidate)
+	for {
+		if _, err := normalizeSuggestedAmount(candidate); err == nil {
+			return candidate
+		}
+		trimmed := trimTrailingAmountChunk(candidate)
+		if trimmed == candidate {
+			return candidate
+		}
+		candidate = trimmed
+	}
+}
+
+func trimTrailingAmountChunk(candidate string) string {
+	trimmed := strings.TrimRightFunc(candidate, unicode.IsSpace)
+	index := strings.LastIndexFunc(trimmed, unicode.IsSpace)
+	if index < 0 {
+		return candidate
+	}
+	return strings.TrimSpace(trimmed[:index])
 }
 
 func normalizeSuggestedAmount(input string) (string, error) {

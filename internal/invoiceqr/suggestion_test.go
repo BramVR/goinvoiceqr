@@ -118,6 +118,8 @@ func TestSuggestPaymentDetailsFromTextFindsPaymentInstructionAmount(t *testing.T
 		{name: "dutch", line: "Gelieve € 86,36 te betalen"},
 		{name: "english", line: "Please pay EUR 86.36"},
 		{name: "english euro after", line: "Please pay 86,36 €"},
+		{name: "english before date", line: "Please pay EUR 86.36 2026-06-30"},
+		{name: "english before reference", line: "Please pay EUR 86.36 123"},
 	}
 
 	for _, tt := range tests {

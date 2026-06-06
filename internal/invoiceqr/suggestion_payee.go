@@ -10,7 +10,7 @@ var (
 	payeeLinePattern             = regexp.MustCompile(`(?im)^\s*(?:payee|beneficiary|supplier|begunstigde|leverancier)\s*:\s*(.+?)\s*$`)
 	creditorIBANLineLabelPattern = regexp.MustCompile(`(?i)^\s*(?:creditor|payee|beneficiary|supplier|begunstigde|leverancier)\s*:\s*`)
 	creditorIBANMarkerPattern    = regexp.MustCompile(`(?i)\bIBAN\b\s*:?\s*[A-Z]{2}[ \t]*[0-9]{2}(?:[ \t]*[A-Z0-9]){10,30}\b`)
-	genericNameLinePattern       = regexp.MustCompile(`(?i)^\s*name\s*:`)
+	customerDetailLinePattern    = regexp.MustCompile(`(?i)^\s*(?:name|customer|client|billing|delivery|ship(?:ped)?\s*to|bill(?:ed)?\s*to|invoice\s*to|klant|naam)\s*:`)
 	legalEntitySuffixPattern     = regexp.MustCompile(`(?i)(?:^|\s)(?:B\.V\.|BVBA|BV|N\.V\.|NV|CV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL)$`)
 	legalEntityNamePattern       = regexp.MustCompile(`(?i)^(.+?\b(?:B\.V\.|BVBA|BV|N\.V\.|NV|CV|GmbH|SARL|S\.A\.|SA|Ltd|Limited|Inc|LLC|VZW|ASBL))(?:\s|$)`)
 	footerBrandAdjacentPattern   = regexp.MustCompile(`(?i)\b(?:IBAN|BIC|VAT|BTW|TVA|BE\s*\d{4}[.\s]?\d{3}[.\s]?\d{3})\b|@|https?://|www\.|\b(?:tel|phone|email|mail)\b`)
@@ -78,7 +78,7 @@ func footerBrandPayeeCandidatesByStatus(text string) ([]AgentContextCandidate, [
 	lines := strings.Split(text, "\n")
 	occurrences := map[string][]AgentContextCandidate{}
 	for index, line := range lines {
-		if payeeLinePattern.MatchString(line) || genericNameLinePattern.MatchString(line) {
+		if payeeLinePattern.MatchString(line) || customerDetailLinePattern.MatchString(line) {
 			continue
 		}
 		candidate, ok := legalEntityNameCandidate(line)

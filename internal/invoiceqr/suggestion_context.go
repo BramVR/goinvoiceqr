@@ -180,16 +180,6 @@ func agentContextIBANCandidates(text string) []AgentContextCandidate {
 	return candidates
 }
 
-func agentContextAmountCandidates(text string) []AgentContextCandidate {
-	if candidates := agentContextPaymentInstructionAmountCandidates(text); len(candidates) > 0 {
-		return candidates
-	}
-	if candidates := agentContextPayableTotalAmountCandidates(text); len(candidates) > 0 {
-		return candidates
-	}
-	return agentContextGenericAmountCandidates(text)
-}
-
 func agentContextPaymentInstructionAmountCandidates(text string) []AgentContextCandidate {
 	lines := strings.Split(text, "\n")
 	candidates := []AgentContextCandidate{}
